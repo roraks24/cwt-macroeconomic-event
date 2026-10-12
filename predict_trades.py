@@ -453,10 +453,12 @@ def main():
     predictor.save_predictions(preds)
 
     # Stage 6: LLM Agent (Outlook and Decision)
-    logger.info("Engaging LLM Agent for macroeconomic outlook synthesis and strategic trade decisions...")
+    logger.info("Engaging LLM Agent for macroeconomic outlook synthesis and strategic trade decisions (lookback=%d days)...", args.days)
     agent = LLMAgent()
-    events_df = predictor.db.get_macro_events()
-    news_df = predictor.db.get_news_articles()
+    end_date = datetime.now(timezone.utc)
+    start_date = end_date - timedelta(days=args.days)
+    events_df = predictor.db.get_macro_events(start_date, end_date)
+    news_df = predictor.db.get_news_articles(start_date, end_date)
 
     model_results = {}
     results_path = REPORTS_DIR / "model_results.json"

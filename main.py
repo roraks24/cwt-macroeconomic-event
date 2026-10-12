@@ -61,41 +61,41 @@ logging.basicConfig(
 logger = logging.getLogger("CWT-Pipeline")
 
 
-def run_scraping(db: DatabaseManager, use_synthetic: bool = False) -> dict[str, Any]:
+def run_scraping(db: DatabaseManager, days_back: int = LOOKBACK_DAYS, use_synthetic: bool = False) -> dict[str, Any]:
     """Stage 1: Data Ingestion (Apify Calendar & Tavily News)."""
     logger.info("=" * 65)
-    logger.info("STAGE 1: Data Ingestion (Apify Calendar & Tavily News)")
+    logger.info("STAGE 1: Data Ingestion (Apify Calendar & Tavily News - Last %d Days)", days_back)
     logger.info("=" * 65)
 
     # 1. Macro Calendar Scraping (ForexFactory via Apify)
-    logger.info("Scraping macroeconomic calendar events...")
+    logger.info("Scraping macroeconomic calendar events (last %d days)...", days_back)
     calendar_scraper = MacroCalendarScraper(api_token=APIFY_API_TOKEN)
 
     if use_synthetic or not APIFY_API_TOKEN:
         logger.warning("No Apify token found or --synthetic flag set. Using synthetic data.")
-        events = calendar_scraper._generate_synthetic_data(days_back=LOOKBACK_DAYS)
+        events = calendar_scraper._generate_synthetic_data(days_back=days_back)
     else:
-        events = calendar_scraper.run(days_back=LOOKBACK_DAYS)
+        events = calendar_scraper.run(days_back=days_back)
 
     logger.info(f"  -> Collected {len(events)} macro events")
     db.insert_macro_events(events)
 
     # 2. Economic News Scraping (Tavily Search API)
-    logger.info("Scraping economic news articles...")
+    logger.info("Scraping economic news articles (last %d days)...", days_back)
     news_scraper = EconomicNewsScraper(api_key=TAVILY_API_KEY)
 
     if use_synthetic or not TAVILY_API_KEY:
         logger.warning("No Tavily key found or --synthetic flag set. Using synthetic news.")
-        articles = news_scraper._generate_synthetic_news(days_back=LOOKBACK_DAYS)
+        articles = news_scraper._generate_synthetic_news(days_back=days_back)
     else:
-        articles = news_scraper.run(days_back=LOOKBACK_DAYS)
+        articles = news_scraper.run(days_back=days_back)
 
     logger.info(f"  -> Collected {len(articles)} news articles")
     db.insert_news_articles(articles)
 
     # 3. Market Data Generation
-    logger.info("Ingesting multi-asset market data...")
-    market_data = _generate_market_data(LOOKBACK_DAYS)
+    logger.info("Ingesting multi-asset market data (last %d days)...", days_back)
+    market_data = _generate_market_data(days_back)
     logger.info(f"  -> Ingested {len(market_data)} market data points")
     db.insert_market_data(market_data)
 
@@ -148,14 +148,14 @@ def _generate_market_data(days_back: int) -> list[dict]:
     return data
 
 
-def run_llm_scoring(db: DatabaseManager) -> pd.DataFrame:
+def run_llm_scoring(db: DatabaseManager, days_back: int = LOOKBACK_DAYS) -> pd.DataFrame:
     """Stage 2: LLM Scorer (JSON Extraction of Sentiment, Regime, and Hawk-Dove)."""
     logger.info("=" * 65)
-    logger.info("STAGE 2: LLM Scorer (Structured JSON Extraction)")
+    logger.info("STAGE 2: LLM Scorer (Structured JSON Extraction - Last %d Days)", days_back)
     logger.info("=" * 65)
 
     end_date = datetime.now(timezone.utc)
-    start_date = end_date - timedelta(days=LOOKBACK_DAYS)
+    start_date = end_date - timedelta(days=days_back)
     news_df = db.get_news_articles(start_date, end_date)
 
     if news_df.empty:
@@ -177,14 +177,14 @@ def run_llm_scoring(db: DatabaseManager) -> pd.DataFrame:
     return scored_df
 
 
-def run_feature_engineering(db: DatabaseManager, scored_news_df: pd.DataFrame | None = None) -> dict[str, Any]:
+def run_feature_engineering(db: DatabaseManager, scored_news_df: pd.DataFrame | None = None, days_back: int = LOOKBACK_DAYS) -> dict[str, Any]:
     """Stage 3: Quantitative Feature Engineering."""
     logger.info("=" * 65)
-    logger.info("STAGE 3: Quantitative Feature Engineering")
+    logger.info("STAGE 3: Quantitative Feature Engineering (Last %d Days)", days_back)
     logger.info("=" * 65)
 
     end_date = datetime.now(timezone.utc)
-    start_date = end_date - timedelta(days=LOOKBACK_DAYS)
+    start_date = end_date - timedelta(days=days_back)
 
     events_df = db.get_macro_events(start_date, end_date)
     news_df = scored_news_df if scored_news_df is not None and not scored_news_df.empty else db.get_news_articles(start_date, end_date)
@@ -277,23 +277,26 @@ def run_visualization(feature_data: dict[str, Any], model_results: dict[str, Any
     return generated
 
 
-def run_llm_agent(db: DatabaseManager, model_results: dict[str, Any]) -> dict[str, Any]:
+def run_llm_agent(db: DatabaseManager, model_results: dict[str, Any], days_back: int = LOOKBACK_DAYS) -> dict[str, Any]:
     """Stage 6: LLM Agent (Macro Outlook Synthesis & Strategic Trade Decisions)."""
     logger.info("=" * 65)
-    logger.info("STAGE 6: LLM Agent (Macro Outlook & Trade Decision Matrix)")
+    logger.info("STAGE 6: LLM Agent (Macro Outlook & Trade Decision Matrix - Last %d Days)", days_back)
     logger.info("=" * 65)
 
+    end_date = datetime.now(timezone.utc)
+    start_date = end_date - timedelta(days=days_back)
+
     # 1. Predict trades by joining macro events and news sentiment
-    predictor = TradePredictor(db_manager=db, lookback_days=LOOKBACK_DAYS)
-    joined_df = predictor.load_and_join_datasets()
+    predictor = TradePredictor(db_manager=db, lookback_days=days_back)
+    joined_df = predictor.load_and_join_datasets(start_date=start_date, end_date=end_date)
     predictions_df = predictor.predict_trades(joined_df)
     csv_path, _ = predictor.save_predictions(predictions_df)
     logger.info(f"  -> Computed base trade signals across {len(predictions_df)} assets")
 
     # 2. Engage LLM Reasoning Agent
     agent = LLMAgent()
-    events_df = db.get_macro_events()
-    news_df = db.get_news_articles()
+    events_df = db.get_macro_events(start_date, end_date)
+    news_df = db.get_news_articles(start_date, end_date)
 
     agent_outputs = agent.generate_outlook_and_decisions(
         model_results=model_results,
@@ -411,6 +414,7 @@ The pipeline ingests macroeconomic calendar surprises (ForexFactory via Apify), 
 def main():
     """Main pipeline execution."""
     parser = argparse.ArgumentParser(description="CWT Macro Economics Sentiment Agent")
+    parser.add_argument("--days", type=int, default=LOOKBACK_DAYS, help=f"Lookback window in days (default: {LOOKBACK_DAYS})")
     parser.add_argument("--scrape-only", action="store_true", help="Only scrape data")
     parser.add_argument("--score-only", action="store_true", help="Only run LLM scorer")
     parser.add_argument("--train-only", action="store_true", help="Only train model")
@@ -422,24 +426,25 @@ def main():
     logger.info("=" * 65)
     logger.info("   CWT Macro Economics Sentiment Agent -- Pipeline Start")
     logger.info("=" * 65)
-    logger.info(f"  Timestamp: {datetime.now(timezone.utc).isoformat()}")
-    logger.info(f"  Mode: {'Synthetic' if args.synthetic else 'Live Dual-LLM Pipeline'}")
+    logger.info(f"  Timestamp:     {datetime.now(timezone.utc).isoformat()}")
+    logger.info(f"  Lookback Window: Last {args.days} Days")
+    logger.info(f"  Mode:          {'Synthetic' if args.synthetic else 'Live Dual-LLM Pipeline'}")
 
     db = DatabaseManager()
 
     if args.predict_only:
-        logger.info("Running in Predict-Only mode...")
+        logger.info("Running in Predict-Only mode (last %d days)...", args.days)
         model_results = {}
         res_file = REPORTS_DIR / "model_results.json"
         if res_file.exists():
             with open(res_file, "r", encoding="utf-8") as f:
                 model_results = json.load(f)
-        run_llm_agent(db, model_results)
+        run_llm_agent(db, model_results, days_back=args.days)
         return
 
     if args.score_only:
-        logger.info("Running in Score-Only mode...")
-        run_llm_scoring(db)
+        logger.info("Running in Score-Only mode (last %d days)...", args.days)
+        run_llm_scoring(db, days_back=args.days)
         return
 
     use_synthetic = args.synthetic or (not APIFY_API_TOKEN and not TAVILY_API_KEY)
@@ -449,17 +454,17 @@ def main():
     try:
         # Stage 1: Data Ingestion (Tavily & Apify)
         if not args.train_only and not args.report_only:
-            run_scraping(db, use_synthetic=use_synthetic)
+            run_scraping(db, days_back=args.days, use_synthetic=use_synthetic)
 
         if args.scrape_only:
             logger.info("Scrape-only mode complete.")
             return
 
         # Stage 2: LLM Scorer (JSON Extraction)
-        scored_news_df = run_llm_scoring(db)
+        scored_news_df = run_llm_scoring(db, days_back=args.days)
 
         # Stage 3: Quantitative Feature Engineering
-        feature_data = run_feature_engineering(db, scored_news_df=scored_news_df)
+        feature_data = run_feature_engineering(db, scored_news_df=scored_news_df, days_back=args.days)
 
         if args.report_only:
             results_path = REPORTS_DIR / "model_results.json"
@@ -477,7 +482,7 @@ def main():
         chart_paths = run_visualization(feature_data, model_results)
 
         # Stage 6: LLM Agent (Macro Outlook & Trade Decisions)
-        agent_outputs = run_llm_agent(db, model_results)
+        agent_outputs = run_llm_agent(db, model_results, days_back=args.days)
 
         # Final Evaluation Report Compilation
         report_path = generate_evaluation_report(model_results, chart_paths)
