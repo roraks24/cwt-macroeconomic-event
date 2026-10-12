@@ -31,6 +31,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 # ── LLM Configuration ──────────────────────────────────────────────────────
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq" if GROQ_API_KEY else "openai").lower()
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_SCORER_MODEL = os.getenv("GROQ_SCORER_MODEL", "qwen/qwen3.8-27b")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 LLM_MODEL = GROQ_MODEL if LLM_PROVIDER == "groq" else os.getenv("LLM_MODEL", OPENAI_MODEL)
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.2"))

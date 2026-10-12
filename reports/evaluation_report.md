@@ -1,6 +1,6 @@
 # CWT Macro Economics Sentiment Agent -- Evaluation Report
 
-**Generated**: 2026-10-12 06:33 UTC  
+**Generated**: 2026-10-12 07:02 UTC  
 **End-to-End Pipeline**: `Tavily/Apify -> LLM Scorer (JSON) -> Features -> LightGBM Walk-Forward -> Metrics -> LLM Decision Agent`
 
 ---
@@ -16,14 +16,14 @@ The pipeline ingests macroeconomic calendar surprises (ForexFactory via Apify), 
 
 | Metric | Value | Description |
 | :--- | :--- | :--- |
-| **Accuracy** | 30.77% | Directional forecast hit rate |
-| **Annualized Sharpe Ratio** | -0.88 | Risk-adjusted excess return (annualized, 252d) |
-| **Sortino Ratio** | -1.10 | Downside risk-penalized return ratio |
-| **Maximum Drawdown (MDD)** | 1.22% | Peak-to-trough equity curve decline |
-| **Win Rate** | 46.15% | Out-of-sample winning trade percentage |
-| **Profit Factor** | 0.86 | Gross profits / Gross losses |
-| **Cumulative Return** | -0.22% | Total walk-forward strategy return |
-| **Total Evaluated Trades** | 13 | Out-of-sample execution instances |
+| **Accuracy** | 34.48% | Directional forecast hit rate |
+| **Annualized Sharpe Ratio** | -1.20 | Risk-adjusted excess return (annualized, 252d) |
+| **Sortino Ratio** | -1.68 | Downside risk-penalized return ratio |
+| **Maximum Drawdown (MDD)** | 3.11% | Peak-to-trough equity curve decline |
+| **Win Rate** | 48.28% | Out-of-sample winning trade percentage |
+| **Profit Factor** | 0.82 | Gross profits / Gross losses |
+| **Cumulative Return** | -1.08% | Total walk-forward strategy return |
+| **Total Evaluated Trades** | 29 | Out-of-sample execution instances |
 
 ---
 
@@ -31,11 +31,11 @@ The pipeline ingests macroeconomic calendar surprises (ForexFactory via Apify), 
 
 | Asset Class | Sharpe Ratio | Sortino Ratio | Max Drawdown | Win Rate | Profit Factor | Cumulative Return |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **US_EQUITY** | -0.88 | -1.10 | 1.22% | 46.15% | 0.86 | -0.22% |
-| **US_BOND** | -0.88 | -1.10 | 1.22% | 46.15% | 0.86 | -0.22% |
-| **GOLD** | -0.88 | -1.10 | 1.22% | 46.15% | 0.86 | -0.22% |
-| **USD_INDEX** | -0.88 | -1.10 | 1.22% | 46.15% | 0.86 | -0.22% |
-| **CRUDE_OIL** | -0.88 | -1.10 | 1.22% | 46.15% | 0.86 | -0.22% |
+| **US_EQUITY** | -1.20 | -1.68 | 3.11% | 48.28% | 0.82 | -1.08% |
+| **US_BOND** | -1.20 | -1.68 | 3.11% | 48.28% | 0.82 | -1.08% |
+| **GOLD** | -1.20 | -1.68 | 3.11% | 48.28% | 0.82 | -1.08% |
+| **USD_INDEX** | -1.20 | -1.68 | 3.11% | 48.28% | 0.82 | -1.08% |
+| **CRUDE_OIL** | -1.20 | -1.68 | 3.11% | 48.28% | 0.82 | -1.08% |
 
 ---
 

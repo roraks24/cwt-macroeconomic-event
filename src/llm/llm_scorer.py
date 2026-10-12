@@ -24,6 +24,7 @@ import logging
 import os
 import re
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
@@ -37,6 +38,7 @@ from config import (
     DATA_DIR,
     GROQ_API_KEY,
     GROQ_MODEL,
+    GROQ_SCORER_MODEL,
     LLM_MODEL,
     LLM_PROVIDER,
     LLM_TEMPERATURE,
@@ -80,10 +82,10 @@ class LLMScorer:
 
         if self.provider == "groq":
             groq_key = api_key or GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
-            self.model = model or GROQ_MODEL or "openai/gpt-oss-120b"
+            self.model = model or GROQ_SCORER_MODEL or "qwen/qwen3.8-27b"
             if groq_key and Groq is not None:
                 try:
-                    self.client = Groq(api_key=groq_key)
+                    self.client = Groq(api_key=groq_key, max_retries=0)
                     logger.info("LLMScorer Groq client initialized with model: %s", self.model)
                 except Exception as e:
                     logger.warning("Failed to initialize Groq client: %s. Heuristic fallback active.", e)
@@ -150,11 +152,13 @@ class LLMScorer:
                 return score_dict
             except Exception as e:
                 err_msg = str(e)
-                if "quota" in err_msg.lower() or "credit" in err_msg.lower() or "429" in err_msg:
-                    logger.warning("OpenAI quota unavailable (%s). Switching instantly to quant heuristic scorer.", err_msg[:60])
+                if "insufficient_quota" in err_msg.lower() or "no credit" in err_msg.lower():
+                    logger.warning("LLM API quota exhausted (%s). Switching to quant heuristic scorer.", err_msg[:60])
                     self._quota_exhausted = True
+                elif "429" in err_msg or "rate" in err_msg.lower():
+                    logger.debug("Rate limit reached for '%s'. Falling back to quant heuristic scorer.", title[:30])
                 else:
-                    logger.warning("LLM call failed for article '%s': %s. Falling back to heuristic scorer.", title[:40], err_msg)
+                    logger.warning("LLM call failed for article '%s': %s. Falling back to heuristic scorer.", title[:40], err_msg[:60])
 
         # Fallback to deterministic rule-based quantitative scorer
         score_dict = self._fallback_rule_scorer(title, content)
@@ -173,7 +177,7 @@ class LLMScorer:
         user_prompt = f"""Evaluate this macroeconomic release/news:
 Date: {date_str or 'Recent'}
 Title: {title}
-Content: {content[:1000]}
+Content: {content[:400]}
 
 Return a JSON object with EXACTLY this structure:
 {{
@@ -202,7 +206,7 @@ Return a JSON object with EXACTLY this structure:
             ],
             response_format={"type": "json_object"},
             temperature=self.temperature,
-            max_tokens=1000,
+            max_tokens=600,
         )
 
         raw_json = response.choices[0].message.content or "{}"
@@ -319,6 +323,10 @@ Return a JSON object with EXACTLY this structure:
             content = art.get("content", "")
             dt_str = art.get("published_date", "")
 
+            combined = f"{title}. {content}".strip()
+            ckey = self._cache_key(combined)
+            was_cached = ckey in self._cache
+
             scores = self.score_article(title=title, content=content, date_str=dt_str)
             item = dict(art)
             item["llm_sentiment_score"] = scores["sentiment_score"]
@@ -334,6 +342,9 @@ Return a JSON object with EXACTLY this structure:
             # Also maintain legacy sentiment_score field for downstream backward compatibility
             item["sentiment_score"] = scores["sentiment_score"]
             enriched.append(item)
+
+            if not was_cached and self.client and not self._quota_exhausted:
+                time.sleep(0.1)
 
             if (idx + 1) % 10 == 0 or (idx + 1) == len(articles):
                 logger.info("Scored %d / %d articles.", idx + 1, len(articles))
