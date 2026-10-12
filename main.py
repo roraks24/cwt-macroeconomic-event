@@ -18,6 +18,8 @@ import sys
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any, Optional
+import pandas as pd
 
 from config import (
     APIFY_API_TOKEN, TAVILY_API_KEY, DATABASE_URL,
@@ -32,6 +34,7 @@ from src.features.feature_engineering import FeatureEngineer
 from src.model.walk_forward import WalkForwardModel
 from src.visualization.charts import MacroSentimentCharts
 from src.summary.macro_outlook import MacroOutlookGenerator
+from predict_trades import TradePredictor
 
 # -- Logging Setup ----------------------------------------------------------
 logging.basicConfig(
@@ -71,9 +74,9 @@ def run_scraping(db: DatabaseManager, use_synthetic: bool = False) -> dict:
 
     if use_synthetic or not TAVILY_API_KEY:
         logger.warning("No Tavily key found or --synthetic flag set. Using synthetic news.")
-        articles = news_scraper._generate_synthetic_news()
+        articles = news_scraper._generate_synthetic_news(days_back=LOOKBACK_DAYS)
     else:
-        articles = news_scraper.run()
+        articles = news_scraper.run(days_back=LOOKBACK_DAYS)
 
     logger.info(f"  -> Collected {len(articles)} news articles")
     db.insert_news_articles(articles)
@@ -249,6 +252,24 @@ def run_visualization(feature_data: dict, model_results: dict) -> list[str]:
     return generated
 
 
+def run_trade_predictions(db: DatabaseManager) -> Any:
+    """Phase 5: Predict multi-asset trade allocations from joined macro & news datasets."""
+    logger.info("=" * 60)
+    logger.info("PHASE 5: Trade Predictions (Joined Macro-News Datasets)")
+    logger.info("=" * 60)
+
+    predictor = TradePredictor(db_manager=db, lookback_days=LOOKBACK_DAYS)
+    joined_df = predictor.load_and_join_datasets()
+    predictions = predictor.predict_trades(joined_df)
+    csv_path, json_path = predictor.save_predictions(predictions)
+    report_path = predictor.generate_trade_report(predictions)
+
+    logger.info(f"  -> Generated {len(predictions)} trade allocations across assets")
+    logger.info(f"  -> Saved trade signals to {report_path}")
+    logger.info(f"  -> Predictions saved to {csv_path} and {json_path}")
+    return predictions
+
+
 def generate_evaluation_report(model_results: dict, chart_paths: list[str]) -> str:
     """Generate the final evaluation report."""
     logger.info("=" * 60)
@@ -406,6 +427,7 @@ def main():
     parser.add_argument("--scrape-only", action="store_true", help="Only scrape data")
     parser.add_argument("--train-only", action="store_true", help="Only train model")
     parser.add_argument("--report-only", action="store_true", help="Only generate reports")
+    parser.add_argument("--predict-only", action="store_true", help="Only predict trades using joined datasets")
     parser.add_argument("--synthetic", action="store_true", help="Use synthetic data (no API keys needed)")
     args = parser.parse_args()
 
@@ -417,6 +439,11 @@ def main():
 
     # Initialize database
     db = DatabaseManager()
+
+    if args.predict_only:
+        logger.info("Predict-only mode: generating trade recommendations from joined data...")
+        trade_predictions = run_trade_predictions(db)
+        return
 
     use_synthetic = args.synthetic or (not APIFY_API_TOKEN and not TAVILY_API_KEY)
     if use_synthetic:
@@ -450,13 +477,17 @@ def main():
         # Phase 4: Visualization
         chart_paths = run_visualization(feature_data, model_results)
 
-        # Phase 5: Evaluation Report
+        # Phase 5: Trade Predictions (Joined Datasets)
+        trade_predictions = run_trade_predictions(db)
+
+        # Phase 6: Evaluation Report
         report_path = generate_evaluation_report(model_results, chart_paths)
 
         logger.info("=" * 60)
         logger.info("         Pipeline Completed Successfully!")
         logger.info("=" * 60)
         logger.info(f"  Evaluation Report: {report_path}")
+        logger.info(f"  Trade Signals:     {REPORTS_DIR / 'trade_signals.md'}")
         logger.info(f"  Charts Directory:  {CHARTS_DIR}")
         logger.info(f"  Model Results:     {REPORTS_DIR / 'model_results.json'}")
 

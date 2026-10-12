@@ -1,6 +1,6 @@
 # CWT Macro Economics Sentiment Agent — Evaluation Report
 
-**Generated**: 2026-10-11 05:24 UTC
+**Generated**: 2026-10-12 05:44 UTC
 
 ---
 
@@ -39,17 +39,17 @@ asset classes using walk-forward (out-of-sample) validation without look-ahead b
 
 | Metric | Value | Description |
 | :--- | :--- | :--- |
-| **Accuracy** | 48.28% | Directional forecast hit rate |
-| **Precision** | 50.00% | Long signal precision |
-| **Recall** | 46.67% | Positive return capture rate |
-| **F1 Score** | 0.4828 | Balanced harmonic classification score |
-| **Annualized Sharpe Ratio** | 2.92 | Risk-adjusted excess return (annualized, 252d) |
-| **Sortino Ratio** | 7.09 | Downside-risk penalized return ratio |
-| **Maximum Drawdown (MDD)** | 1.02% | Peak-to-trough equity curve decline |
-| **Win Rate** | 55.17% | Ratio of winning trades to total trades |
-| **Profit Factor** | 1.54 | Gross profits / Gross losses |
-| **Cumulative Return** | 2.30% | Total walk-forward strategy return |
-| **Total Evaluated Trades** | 29 | Out-of-sample execution instances |
+| **Accuracy** | 53.85% | Directional forecast hit rate |
+| **Precision** | 33.33% | Long signal precision |
+| **Recall** | 20.00% | Positive return capture rate |
+| **F1 Score** | 0.2500 | Balanced harmonic classification score |
+| **Annualized Sharpe Ratio** | 0.21 | Risk-adjusted excess return (annualized, 252d) |
+| **Sortino Ratio** | 0.23 | Downside-risk penalized return ratio |
+| **Maximum Drawdown (MDD)** | 0.94% | Peak-to-trough equity curve decline |
+| **Win Rate** | 69.23% | Ratio of winning trades to total trades |
+| **Profit Factor** | 1.04 | Gross profits / Gross losses |
+| **Cumulative Return** | 0.05% | Total walk-forward strategy return |
+| **Total Evaluated Trades** | 13 | Out-of-sample execution instances |
 
 ---
 
@@ -57,11 +57,11 @@ asset classes using walk-forward (out-of-sample) validation without look-ahead b
 
 | Asset Class | Sharpe Ratio | Sortino Ratio | Max Drawdown | Win Rate | Profit Factor | Cumulative Return |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **US_EQUITY** | 2.92 | 7.09 | 1.02% | 55.17% | 1.54 | 2.30% |
-| **US_BOND** | 2.92 | 7.09 | 1.02% | 55.17% | 1.54 | 2.30% |
-| **GOLD** | 2.92 | 7.09 | 1.02% | 55.17% | 1.54 | 2.30% |
-| **USD_INDEX** | 2.92 | 7.09 | 1.02% | 55.17% | 1.54 | 2.30% |
-| **CRUDE_OIL** | 2.92 | 7.09 | 1.02% | 55.17% | 1.54 | 2.30% |
+| **US_EQUITY** | 0.21 | 0.23 | 0.94% | 69.23% | 1.04 | 0.05% |
+| **US_BOND** | 0.21 | 0.23 | 0.94% | 69.23% | 1.04 | 0.05% |
+| **GOLD** | 0.21 | 0.23 | 0.94% | 69.23% | 1.04 | 0.05% |
+| **USD_INDEX** | 0.21 | 0.23 | 0.94% | 69.23% | 1.04 | 0.05% |
+| **CRUDE_OIL** | 0.21 | 0.23 | 0.94% | 69.23% | 1.04 | 0.05% |
 
 ---
 

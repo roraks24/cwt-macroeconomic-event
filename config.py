@@ -23,9 +23,15 @@ for d in [RAW_DIR, PROCESSED_DIR, REPORTS_DIR, CHARTS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 # ── API Keys ───────────────────────────────────────────────────────────────
-APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN", "")
+APIFY_API_TOKEN = os.getenv("APIFY_TOKEN") or os.getenv("APIFY_API_TOKEN", "")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
+# ── Apify Actors ──────────────────────────────────────────────────────────
+APIFY_CALENDAR_PRIMARY = os.getenv("APIFY_CALENDAR_PRIMARY", "xtracto/forexfactory-calendar")
+APIFY_CALENDAR_BACKUP = os.getenv("APIFY_CALENDAR_BACKUP", "bovi/forex-economic-calendar-scraper")
+APIFY_NEWS_HEADLINES = os.getenv("APIFY_NEWS_HEADLINES", "gazidev/google-news-scraper")
+APIFY_NEWS_FULL_TEXT = os.getenv("APIFY_NEWS_FULL_TEXT", "nourishing_courier/google-news-scraper")
 
 # ── Database ───────────────────────────────────────────────────────────────
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DATA_DIR / 'cwt_macro.db'}")
