@@ -270,10 +270,12 @@ def run_visualization(feature_data: dict[str, Any], model_results: dict[str, Any
         "importance_dict": model_results.get("feature_importances", {}),
         "predictions_df": model_results.get("predictions"),
         "feature_df": feature_data.get("feature_matrix"),
+        "market_df": feature_data.get("market_df"),
+        "model_results": model_results,
     }
 
     generated = charts.generate_all_charts(chart_data)
-    logger.info(f"  -> Generated {len(generated)} charts in {CHARTS_DIR}")
+    logger.info(f"  -> Generated {len(generated)} visual deliverables (Plotly HTML, PNG, and Dashboard)")
     return generated
 
 
@@ -385,13 +387,19 @@ The pipeline ingests macroeconomic calendar surprises (ForexFactory via Apify), 
 {matrix_table_content}
 ---
 
-## 4. Visual Artifacts Generated
+## 4. Visual Deliverables & Interactive HTML Dashboard
 
-"""
-    for i, path in enumerate(chart_paths, 1):
-        report += f"{i}. **`{Path(path).name}`**\n"
+- 🌐 **Interactive Web Dashboard**: [macro_dashboard.html](macro_dashboard.html) *(Single-file dashboard with hover tooltips, zoom, and zero setup)*
 
-    report += f"""
+### Priority Charts (Plotly Interactive HTML & High-Res PNG):
+1. **Sentiment Over Time with Event Markers**: [sentiment_timeline_events.html](charts/sentiment_timeline_events.html) | [PNG](charts/sentiment_timeline_events.png)
+2. **Event-Study Dynamics (-3 to +5 Days)**: [event_study_dynamics.html](charts/event_study_dynamics.html) | [PNG](charts/event_study_dynamics.png)
+3. **Strategy Matrix Heatmap (Event × Direction × Horizon)**: [strategy_matrix_heatmap.html](charts/strategy_matrix_heatmap.html) | [PNG](charts/strategy_matrix_heatmap.png)
+4. **Equity Curve with Drawdown vs. SPY Benchmark**: [equity_curve_drawdown.html](charts/equity_curve_drawdown.html) | [PNG](charts/equity_curve_drawdown.png)
+5. **Predicted vs. Realised P&L (Model Calibration)**: [predicted_vs_realised_pnl.html](charts/predicted_vs_realised_pnl.html) | [PNG](charts/predicted_vs_realised_pnl.png)
+6. **Economic Surprise vs. Next-Day SPY Return**: [surprise_vs_next_day_return.html](charts/surprise_vs_next_day_return.html) | [PNG](charts/surprise_vs_next_day_return.png)
+7. **Rolling 30-Trade Sharpe Ratio**: [rolling_sharpe.html](charts/rolling_sharpe.html) | [PNG](charts/rolling_sharpe.png)
+
 ---
 
 ## 5. Artifact Deliverables Summary
