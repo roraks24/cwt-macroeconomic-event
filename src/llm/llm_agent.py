@@ -28,13 +28,22 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from config import (
     ASSET_CLASSES,
+    GROQ_API_KEY,
+    GROQ_MODEL,
     LLM_MODEL,
+    LLM_PROVIDER,
     LLM_TEMPERATURE,
     OPENAI_API_KEY,
+    OPENAI_MODEL,
     REPORTS_DIR,
 )
 
 logger = logging.getLogger("CWT-LLMAgent")
+
+try:
+    from groq import Groq
+except ImportError:
+    Groq = None  # type: ignore
 
 try:
     from openai import OpenAI
@@ -52,23 +61,43 @@ class LLMAgent:
     def __init__(
         self,
         api_key: str | None = None,
-        model: str = LLM_MODEL,
+        model: str | None = None,
         temperature: float = 0.3,
+        provider: str | None = None,
     ) -> None:
-        self.api_key = api_key or OPENAI_API_KEY or os.getenv("OPENAI_API_KEY", "")
-        self.model = model
+        self.provider = (provider or LLM_PROVIDER or "groq").lower()
         self.temperature = temperature
-        self.client: OpenAI | None = None
+        self.client = None
         self._quota_exhausted: bool = False
 
-        if self.api_key and OpenAI is not None:
-            try:
-                self.client = OpenAI(api_key=self.api_key)
-                logger.info("LLMAgent OpenAI client initialized with model: %s", self.model)
-            except Exception as e:
-                logger.warning("Failed to initialize OpenAI client in LLMAgent: %s. Using heuristic synthesizer.", e)
+        if self.provider == "groq":
+            groq_key = api_key or GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
+            self.model = model or GROQ_MODEL or "openai/gpt-oss-120b"
+            if groq_key and Groq is not None:
+                try:
+                    self.client = Groq(api_key=groq_key)
+                    logger.info("LLMAgent Groq client initialized with model: %s", self.model)
+                except Exception as e:
+                    logger.warning("Failed to initialize Groq client in LLMAgent: %s.", e)
+            elif groq_key and OpenAI is not None:
+                try:
+                    self.client = OpenAI(api_key=groq_key, base_url="https://api.groq.com/openai/v1")
+                    logger.info("LLMAgent OpenAI-compatible Groq client initialized with model: %s", self.model)
+                except Exception as e:
+                    logger.warning("Failed to initialize Groq client in LLMAgent: %s.", e)
+            else:
+                logger.info("Groq API key not detected for LLMAgent. Using heuristic synthesis.")
         else:
-            logger.info("OpenAI API key not detected or library missing. Using heuristic synthesis.")
+            openai_key = api_key or OPENAI_API_KEY or os.getenv("OPENAI_API_KEY", "")
+            self.model = model or OPENAI_MODEL or "gpt-4o-mini"
+            if openai_key and OpenAI is not None:
+                try:
+                    self.client = OpenAI(api_key=openai_key)
+                    logger.info("LLMAgent OpenAI client initialized with model: %s", self.model)
+                except Exception as e:
+                    logger.warning("Failed to initialize OpenAI client in LLMAgent: %s. Using heuristic synthesizer.", e)
+            else:
+                logger.info("OpenAI API key not detected or library missing. Using heuristic synthesis.")
 
     def generate_outlook_and_decisions(
         self,
@@ -214,7 +243,7 @@ Write a comprehensive Markdown report structured with:
                         {"role": "user", "content": user_prompt},
                     ],
                     temperature=self.temperature,
-                    max_tokens=1000,
+                    max_tokens=2500,
                 )
                 text = resp.choices[0].message.content
                 if text and len(text.strip()) > 200:

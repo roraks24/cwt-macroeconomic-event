@@ -35,12 +35,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from config import (
     ASSET_CLASSES,
     DATA_DIR,
+    GROQ_API_KEY,
+    GROQ_MODEL,
     LLM_MODEL,
+    LLM_PROVIDER,
     LLM_TEMPERATURE,
     OPENAI_API_KEY,
+    OPENAI_MODEL,
 )
 
 logger = logging.getLogger("CWT-LLMScorer")
+
+try:
+    from groq import Groq
+except ImportError:
+    Groq = None  # type: ignore
 
 try:
     from openai import OpenAI
@@ -51,7 +60,7 @@ except ImportError:
 class LLMScorer:
     """
     Quantitative macroeconomic scorer powered by LLM JSON completions.
-    Extracts multi-dimensional regime, sentiment, and hawk-dove features.
+    Extracts multi-dimensional regime, sentiment, and hawk-dove features using Groq / OpenAI.
     """
 
     CACHE_FILE = DATA_DIR / "llm_scorer_cache.json"
@@ -59,24 +68,44 @@ class LLMScorer:
     def __init__(
         self,
         api_key: str | None = None,
-        model: str = LLM_MODEL,
+        model: str | None = None,
         temperature: float = LLM_TEMPERATURE,
+        provider: str | None = None,
     ) -> None:
-        self.api_key = api_key or OPENAI_API_KEY or os.getenv("OPENAI_API_KEY", "")
-        self.model = model
+        self.provider = (provider or LLM_PROVIDER or "groq").lower()
         self.temperature = temperature
-        self.client: OpenAI | None = None
+        self.client = None
         self._quota_exhausted: bool = False
         self._cache: dict[str, dict] = self._load_cache()
 
-        if self.api_key and OpenAI is not None:
-            try:
-                self.client = OpenAI(api_key=self.api_key)
-                logger.info("LLMScorer OpenAI client initialized with model: %s", self.model)
-            except Exception as e:
-                logger.warning("Failed to initialize OpenAI client in LLMScorer: %s. Rule-based fallback active.", e)
+        if self.provider == "groq":
+            groq_key = api_key or GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
+            self.model = model or GROQ_MODEL or "openai/gpt-oss-120b"
+            if groq_key and Groq is not None:
+                try:
+                    self.client = Groq(api_key=groq_key)
+                    logger.info("LLMScorer Groq client initialized with model: %s", self.model)
+                except Exception as e:
+                    logger.warning("Failed to initialize Groq client: %s. Heuristic fallback active.", e)
+            elif groq_key and OpenAI is not None:
+                try:
+                    self.client = OpenAI(api_key=groq_key, base_url="https://api.groq.com/openai/v1")
+                    logger.info("LLMScorer OpenAI-compatible Groq client initialized with model: %s", self.model)
+                except Exception as e:
+                    logger.warning("Failed to initialize Groq OpenAI-compatible client: %s.", e)
+            else:
+                logger.info("Groq API key not found. Heuristic scoring active.")
         else:
-            logger.info("OpenAI API key not detected or library missing. Using heuristic quant scoring.")
+            openai_key = api_key or OPENAI_API_KEY or os.getenv("OPENAI_API_KEY", "")
+            self.model = model or OPENAI_MODEL or "gpt-4o-mini"
+            if openai_key and OpenAI is not None:
+                try:
+                    self.client = OpenAI(api_key=openai_key)
+                    logger.info("LLMScorer OpenAI client initialized with model: %s", self.model)
+                except Exception as e:
+                    logger.warning("Failed to initialize OpenAI client in LLMScorer: %s. Rule-based fallback active.", e)
+            else:
+                logger.info("OpenAI API key not detected or library missing. Using heuristic quant scoring.")
 
     def _load_cache(self) -> dict[str, dict]:
         """Load previously scored articles from persistent JSON cache."""
@@ -173,7 +202,7 @@ Return a JSON object with EXACTLY this structure:
             ],
             response_format={"type": "json_object"},
             temperature=self.temperature,
-            max_tokens=350,
+            max_tokens=1000,
         )
 
         raw_json = response.choices[0].message.content or "{}"

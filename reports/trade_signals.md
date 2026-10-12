@@ -1,6 +1,6 @@
 # CWT Macro Economics Sentiment Agent — Trade Decision Matrix
 
-**Generated**: 2026-10-12 06:33 UTC  
+**Generated**: 2026-10-12 06:39 UTC  
 **Analytical Architecture**: `Tavily/Apify → LLM Scorer (JSON) → Features → LightGBM Walk-Forward → LLM Decision Agent`  
 **Dominant Macro Regime**: **Neutral Policy Transition (Balanced Risk)**  
 

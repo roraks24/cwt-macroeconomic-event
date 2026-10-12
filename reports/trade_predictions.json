@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-12T06:33:55.449592+00:00",
-  "agent_model": "gpt-4o-mini",
+  "generated_at": "2026-10-12T06:39:03.587061+00:00",
+  "agent_model": "openai/gpt-oss-120b",
   "overall_metrics": {
     "accuracy": 0.3077,
     "precision": 0.2,
