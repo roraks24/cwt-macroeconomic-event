@@ -290,19 +290,33 @@ class FeatureEngineer:
         else:
             ndf["sentiment_score"] = pd.to_numeric(ndf[score_col], errors="coerce").fillna(0.0)
 
-        # Aggregate per date
-        daily_sentiment = ndf.groupby("event_date").agg(
-            mean_sentiment=("sentiment_score", "mean"),
-            news_volume=("sentiment_score", "count"),
-        )
+        # Check for LLM Scorer structured fields
+        llm_cols = ["llm_hawk_dove_score", "llm_growth_momentum", "llm_inflation_pressure", "llm_surprise_impact"]
+        for lc in llm_cols:
+            if lc in ndf.columns:
+                ndf[lc] = pd.to_numeric(ndf[lc], errors="coerce").fillna(0.0)
 
+        agg_dict = {
+            "mean_sentiment": ("sentiment_score", "mean"),
+            "news_volume": ("sentiment_score", "count"),
+        }
+        for lc in llm_cols:
+            if lc in ndf.columns:
+                agg_dict[f"mean_{lc}"] = (lc, "mean")
+
+        daily_sentiment = ndf.groupby("event_date").agg(**agg_dict)
         daily_sentiment = daily_sentiment.reindex(all_dates).fillna(0.0)
 
         daily_sentiment["sentiment_roll_3d"] = daily_sentiment["mean_sentiment"].rolling(3, min_periods=1).mean()
         daily_sentiment["sentiment_roll_7d"] = daily_sentiment["mean_sentiment"].rolling(7, min_periods=1).mean()
         daily_sentiment["sentiment_momentum"] = daily_sentiment["sentiment_roll_3d"] - daily_sentiment["sentiment_roll_7d"]
 
-        return daily_sentiment[["sentiment_roll_3d", "sentiment_roll_7d", "sentiment_momentum", "news_volume"]]
+        out_cols = ["sentiment_roll_3d", "sentiment_roll_7d", "sentiment_momentum", "news_volume"]
+        for lc in llm_cols:
+            if f"mean_{lc}" in daily_sentiment.columns:
+                out_cols.append(f"mean_{lc}")
+
+        return daily_sentiment[out_cols]
 
     def create_macro_regime_features(self) -> pd.DataFrame:
         """

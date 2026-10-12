@@ -1,83 +1,45 @@
-# CWT Macro Economics Sentiment Agent — Evaluation Report
+# CWT Macro Economics Sentiment Agent -- Evaluation Report
 
-**Generated**: 2026-10-12 05:44 UTC
+**Generated**: 2026-10-12 06:33 UTC  
+**End-to-End Pipeline**: `Tavily/Apify -> LLM Scorer (JSON) -> Features -> LightGBM Walk-Forward -> Metrics -> LLM Decision Agent`
 
 ---
 
 ## 1. Executive Summary
 
-This report presents the empirical performance results of the **CWT Quantitative Macroeconomic Trading Pipeline**.
-The system ingests high-impact macroeconomic event calendars (CPI, FOMC, NFP, GDP, PMI), aggregates thematic economic news,
-normalizes calendar timestamps to market trading days, and validates optimal trading strategy signals across multiple
-asset classes using walk-forward (out-of-sample) validation without look-ahead bias.
+This report evaluates the **CWT Quantitative Macroeconomic Trading Pipeline**.
+The pipeline ingests macroeconomic calendar surprises (ForexFactory via Apify), scores thematic economic news using an **LLM Scorer (JSON)**, builds quantitative interaction features, validates trade forecasting using sliding **walk-forward validation**, and synthesizes executive decisions through an **LLM Reasoning Agent**.
 
 ---
 
-## 2. Data Pipeline Summary
-
-| Component | Details |
-| :--- | :--- |
-| **Macro Events Source** | Apify (`drobnikj/investing-com-calendar` actor) |
-| **News Ingestion** | Tavily Search API with NLP Polarity Sentiment Scoring |
-| **Historical Lookback** | 180 days |
-| **Database Architecture** | SQLite ORM (`macro_events`, `news_articles`, `market_data`) |
-| **Feature Engineering** | Event surprises (actual - forecast), time deltas to key prints, rolling volatilities, regime clusters |
-
----
-
-## 3. Model Architecture & Walk-Forward Validation
-
-- **Predictive Engine**: LightGBM (Gradient Boosted Decision Trees)
-- **Validation Methodology**: Sliding Walk-Forward (expanding/rolling window, zero future data leakage)
-- **Training Window**: 120 days
-- **Out-of-Sample Test Window**: 30 days
-- **Optimization Target**: Next-day asset return direction (Long = +1, Short = -1)
-
----
-
-## 4. Overall Model Performance Metrics
+## 2. Quantitative Model Performance (Out-of-Sample)
 
 | Metric | Value | Description |
 | :--- | :--- | :--- |
-| **Accuracy** | 53.85% | Directional forecast hit rate |
-| **Precision** | 33.33% | Long signal precision |
-| **Recall** | 20.00% | Positive return capture rate |
-| **F1 Score** | 0.2500 | Balanced harmonic classification score |
-| **Annualized Sharpe Ratio** | 0.21 | Risk-adjusted excess return (annualized, 252d) |
-| **Sortino Ratio** | 0.23 | Downside-risk penalized return ratio |
-| **Maximum Drawdown (MDD)** | 0.94% | Peak-to-trough equity curve decline |
-| **Win Rate** | 69.23% | Ratio of winning trades to total trades |
-| **Profit Factor** | 1.04 | Gross profits / Gross losses |
-| **Cumulative Return** | 0.05% | Total walk-forward strategy return |
+| **Accuracy** | 30.77% | Directional forecast hit rate |
+| **Annualized Sharpe Ratio** | -0.88 | Risk-adjusted excess return (annualized, 252d) |
+| **Sortino Ratio** | -1.10 | Downside risk-penalized return ratio |
+| **Maximum Drawdown (MDD)** | 1.22% | Peak-to-trough equity curve decline |
+| **Win Rate** | 46.15% | Out-of-sample winning trade percentage |
+| **Profit Factor** | 0.86 | Gross profits / Gross losses |
+| **Cumulative Return** | -0.22% | Total walk-forward strategy return |
 | **Total Evaluated Trades** | 13 | Out-of-sample execution instances |
 
 ---
 
-## 5. Strategy Permutation Matrix (Multi-Asset Class)
+## 3. Multi-Asset Strategy Matrix
 
 | Asset Class | Sharpe Ratio | Sortino Ratio | Max Drawdown | Win Rate | Profit Factor | Cumulative Return |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **US_EQUITY** | 0.21 | 0.23 | 0.94% | 69.23% | 1.04 | 0.05% |
-| **US_BOND** | 0.21 | 0.23 | 0.94% | 69.23% | 1.04 | 0.05% |
-| **GOLD** | 0.21 | 0.23 | 0.94% | 69.23% | 1.04 | 0.05% |
-| **USD_INDEX** | 0.21 | 0.23 | 0.94% | 69.23% | 1.04 | 0.05% |
-| **CRUDE_OIL** | 0.21 | 0.23 | 0.94% | 69.23% | 1.04 | 0.05% |
+| **US_EQUITY** | -0.88 | -1.10 | 1.22% | 46.15% | 0.86 | -0.22% |
+| **US_BOND** | -0.88 | -1.10 | 1.22% | 46.15% | 0.86 | -0.22% |
+| **GOLD** | -0.88 | -1.10 | 1.22% | 46.15% | 0.86 | -0.22% |
+| **USD_INDEX** | -0.88 | -1.10 | 1.22% | 46.15% | 0.86 | -0.22% |
+| **CRUDE_OIL** | -0.88 | -1.10 | 1.22% | 46.15% | 0.86 | -0.22% |
 
 ---
 
-## 6. Key Quantitative Insights
-
-### Feature Importance & Regimes
-1. **Surprise Momentum**: Discrepancies between consensus expectations and realized figures (especially CPI and NFP) show significant predictive power for short-term asset re-pricing.
-2. **Event Proximity Features**: Distance to scheduled FOMC meetings influences market volatility regimes and strategy holding times.
-3. **News Sentiment Feedback**: Aggregated news sentiment serves as a high-frequency confirmation filter for directional macro positioning.
-
-### Walk-Forward Integrity
-By strictly enforcing temporal walk-forward splits, the model's test metrics reflect realistic out-of-sample trading efficacy without risk of backtest overfitting.
-
----
-
-## 7. Visual Artifacts Generated
+## 4. Visual Artifacts Generated
 
 1. **`macro_sentiment_timeline.png`**
 2. **`economic_surprise_heatmap.png`**
@@ -87,19 +49,12 @@ By strictly enforcing temporal walk-forward splits, the model's test metrics ref
 
 ---
 
-## 8. Risk Considerations & Constraints
+## 5. Artifact Deliverables Summary
 
-- **Execution Slippage & Fees**: Backtest metrics model mid-market executions; live deployment requires factoring spread, commission, and funding rates.
-- **Regime Shifts**: Sudden structural changes (e.g. unexpected geopolitical shocks) may decouple short-term correlations from historical patterns.
-- **Sample Horizon**: Evaluated over a 180-day window; extending lookback to multi-year horizons will enhance statistical robustness.
-
----
-
-## 9. Next Steps for Production Deployment
-
-1. **Broker Integration**: Connect paper trading or live execution via Interactive Brokers / Alpaca API.
-2. **Alternative Data Feeds**: Integrate real-time central bank speech audio transcripts and Treasury yield curve real-time feeds.
-3. **Dynamic Position Sizing**: Employ Kelly Criterion or volatility parity sizing to scale positions based on model prediction confidence.
+- **Macroeconomic Outlook**: [macro_outlook.md](reports/macro_outlook.md)
+- **Trade Decision Matrix**: [trade_signals.md](reports/trade_signals.md)
+- **Structured Trade Data**: [trade_predictions.json](reports/trade_predictions.json)
+- **Model Evaluation Results**: [model_results.json](reports/model_results.json)
 
 ---
 

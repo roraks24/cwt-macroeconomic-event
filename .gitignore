@@ -15,7 +15,9 @@ build/
 # Data
 data/raw/*.json
 data/processed/*.csv
+data/processed/*.json
 data/*.db
+data/*.json
 
 # IDE
 .idea/

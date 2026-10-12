@@ -40,6 +40,7 @@ from config import (
 from src.database.db_manager import DatabaseManager
 from src.features.feature_engineering import FeatureEngineer
 from src.model.walk_forward import WalkForwardModel
+from src.llm import LLMAgent, LLMScorer
 
 logger = logging.getLogger("CWT-TradePredictor")
 
@@ -73,6 +74,14 @@ class TradePredictor:
         logger.info("Loading news articles & sentiment from database...")
         news_df = self.db.get_news_articles(start_dt, end_dt)
 
+        # Stage 2: LLM Scorer (JSON)
+        if not news_df.empty:
+            logger.info("Enriching news with LLMScorer (JSON)...")
+            scorer = LLMScorer()
+            news_records = news_df.to_dict(orient="records")
+            enriched_news = scorer.score_articles_batch(news_records)
+            news_df = pd.DataFrame(enriched_news)
+
         logger.info("Loading multi-asset market data from database...")
         market_df = self.db.get_market_data(start_date=start_dt, end_date=end_dt)
 
@@ -86,7 +95,7 @@ class TradePredictor:
         # ── 1. Aggregate Daily Macro Calendar Surprises ────────────────────────
         daily_macro = self._aggregate_daily_macro_events(events_df)
 
-        # ── 2. Aggregate Daily News Sentiment ──────────────────────────────────
+        # ── 2. Aggregate Daily News Sentiment & LLM Metrics ────────────────────
         daily_sentiment = self._aggregate_daily_news_sentiment(news_df)
 
         # ── 3. Join with Market Data across Assets ─────────────────────────────
@@ -142,32 +151,39 @@ class TradePredictor:
         return pd.DataFrame(records)
 
     def _aggregate_daily_news_sentiment(self, news_df: pd.DataFrame) -> pd.DataFrame:
-        """Aggregate news articles into daily polarity, article counts, and rolling sentiment."""
+        """Aggregate news articles into daily polarity, LLM metrics, article counts, and rolling sentiment."""
         if news_df.empty:
-            return pd.DataFrame(columns=["calendar_date", "news_sentiment", "news_subjectivity", "article_count"])
+            return pd.DataFrame(columns=["calendar_date", "news_sentiment", "llm_hawk_dove", "llm_growth", "llm_inflation", "article_count"])
 
         df = news_df.copy()
         df["calendar_date"] = pd.to_datetime(df["published_date"]).dt.date
 
         records = []
         for c_date, group in df.groupby("calendar_date"):
-            sentiments = pd.to_numeric(group["sentiment_score"], errors="coerce").dropna()
-            subj = pd.to_numeric(group.get("sentiment_subjectivity", pd.Series()), errors="coerce").dropna()
+            sentiments = pd.to_numeric(group.get("sentiment_score"), errors="coerce").dropna()
+            hawk_dove = pd.to_numeric(group.get("llm_hawk_dove_score"), errors="coerce").dropna()
+            growth = pd.to_numeric(group.get("llm_growth_momentum"), errors="coerce").dropna()
+            inflation = pd.to_numeric(group.get("llm_inflation_pressure"), errors="coerce").dropna()
+            impact = pd.to_numeric(group.get("llm_surprise_impact"), errors="coerce").dropna()
 
             records.append({
                 "calendar_date": c_date,
                 "news_sentiment": float(sentiments.mean()) if not sentiments.empty else 0.0,
-                "news_subjectivity": float(subj.mean()) if not subj.empty else 0.5,
+                "llm_hawk_dove": float(hawk_dove.mean()) if not hawk_dove.empty else 0.0,
+                "llm_growth": float(growth.mean()) if not growth.empty else 0.0,
+                "llm_inflation": float(inflation.mean()) if not inflation.empty else 0.0,
+                "llm_impact": float(impact.mean()) if not impact.empty else 0.5,
                 "article_count": len(group),
             })
 
         res_df = pd.DataFrame(records)
         res_df.sort_values(by="calendar_date", inplace=True)
 
-        # Rolling 3-day and 7-day sentiment smoothing
+        # Rolling 3-day and 7-day smoothing
         res_df["sentiment_3d_rolling"] = res_df["news_sentiment"].rolling(3, min_periods=1).mean()
         res_df["sentiment_7d_rolling"] = res_df["news_sentiment"].rolling(7, min_periods=1).mean()
         res_df["sentiment_momentum"] = res_df["sentiment_3d_rolling"] - res_df["sentiment_7d_rolling"]
+        res_df["hawk_dove_7d"] = res_df["llm_hawk_dove"].rolling(7, min_periods=1).mean()
         return res_df
 
     def _impute_neutral_defaults(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -177,7 +193,10 @@ class TradePredictor:
             if col in df.columns:
                 df[col] = df[col].fillna(0.0)
 
-        sentiment_cols = ["news_sentiment", "sentiment_3d_rolling", "sentiment_7d_rolling", "sentiment_momentum"]
+        sentiment_cols = [
+            "news_sentiment", "sentiment_3d_rolling", "sentiment_7d_rolling", "sentiment_momentum",
+            "llm_hawk_dove", "hawk_dove_7d", "llm_growth", "llm_inflation", "llm_impact"
+        ]
         for col in sentiment_cols:
             if col in df.columns:
                 df[col] = df[col].ffill().fillna(0.0)
@@ -245,6 +264,7 @@ class TradePredictor:
             "surprise_sum", "surprise_mean", "high_impact_events",
             "cpi_surprise", "nfp_surprise", "fomc_event",
             "news_sentiment", "sentiment_3d_rolling", "sentiment_momentum",
+            "llm_hawk_dove", "hawk_dove_7d", "llm_growth", "llm_inflation", "llm_impact",
             "surprise_sentiment_interaction", "day_of_week",
             "return_lag1", "return_roll_mean_5d", "return_roll_std_5d", "vol_regime_high",
         ]
@@ -431,7 +451,29 @@ def main():
     print("=" * 95 + "\n")
 
     predictor.save_predictions(preds)
-    predictor.generate_trade_report(preds)
+
+    # Stage 6: LLM Agent (Outlook and Decision)
+    logger.info("Engaging LLM Agent for macroeconomic outlook synthesis and strategic trade decisions...")
+    agent = LLMAgent()
+    events_df = predictor.db.get_macro_events()
+    news_df = predictor.db.get_news_articles()
+
+    model_results = {}
+    results_path = REPORTS_DIR / "model_results.json"
+    if results_path.exists():
+        try:
+            with open(results_path, "r", encoding="utf-8") as f:
+                model_results = json.load(f)
+        except Exception:
+            pass
+
+    agent_res = agent.generate_outlook_and_decisions(
+        model_results=model_results,
+        trade_predictions_df=preds,
+        macro_events_df=events_df,
+        news_sentiment_df=news_df,
+    )
+    logger.info("LLM Agent successfully updated macro outlook and trade decision matrices.")
 
 
 if __name__ == "__main__":

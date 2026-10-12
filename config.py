@@ -27,6 +27,11 @@ APIFY_API_TOKEN = os.getenv("APIFY_TOKEN") or os.getenv("APIFY_API_TOKEN", "")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
+# ── LLM Configuration ──────────────────────────────────────────────────────
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.2"))
+LLM_SCORER_BATCH_SIZE = int(os.getenv("LLM_SCORER_BATCH_SIZE", "5"))
+
 # ── Apify Actors ──────────────────────────────────────────────────────────
 APIFY_CALENDAR_PRIMARY = os.getenv("APIFY_CALENDAR_PRIMARY", "xtracto/forexfactory-calendar")
 APIFY_CALENDAR_BACKUP = os.getenv("APIFY_CALENDAR_BACKUP", "bovi/forex-economic-calendar-scraper")
