@@ -1,8 +1,8 @@
 # CWT Macro Economics Sentiment Agent — Trade Decision Matrix
 
-**Generated**: 2026-10-12 07:02 UTC  
-**Analytical Architecture**: `Tavily/Apify → LLM Scorer (JSON) → Features → LightGBM Walk-Forward → LLM Decision Agent`  
-**Dominant Macro Regime**: **Neutral Policy Transition (Balanced Risk)**  
+**Generated**: 2026-10-13 13:24 UTC  
+**Analytical Architecture**: `Tavily/Apify → Quant Sentiment Scorer → Features → LightGBM Walk-Forward → Strategy Engine`  
+**Dominant Macro Regime**: **Contracting / Rising (Bearish)**  
 
 ---
 
@@ -10,40 +10,40 @@
 
 | Asset Class | Signal | Position Sizing | Win Probability | Expected Return | Stop Loss | Take Profit | Key Macro Trigger |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| **US_EQUITY** | 🔴 SHORT | 1.0x (Standard Allocation) | 60.4% | +0.20% | -1.17% | +1.95% | Bullish News Sentiment (+0.50) |
-| **US_BOND** | 🟢 LONG | 1.5x (High Conviction Overweight) | 77.7% | +0.39% | -0.84% | +1.40% | Bullish News Sentiment (+0.50) |
-| **GOLD** | 🔴 SHORT | 1.5x (High Conviction Overweight) | 76.2% | +0.22% | -0.51% | +0.85% | Bullish News Sentiment (+0.50) |
-| **USD_INDEX** | 🟢 LONG | 1.0x (Standard Allocation) | 65.1% | +0.08% | -0.31% | +0.52% | Bullish News Sentiment (+0.50) |
-| **CRUDE_OIL** | 🔴 SHORT | 0.75x (Cautious Underweight) | 59.9% | +1.04% | -6.32% | +10.53% | Bullish News Sentiment (+0.50) |
+| **US_EQUITY** | ⚪ NEUTRAL | 0.0x (Flat / Cash) | 50.0% | +0.00% | -0.69% | +1.15% | Bullish News Sentiment (+0.19) |
+| **US_BOND** | 🔴 SHORT | 1.0x (Standard Allocation) | 68.5% | +0.15% | -0.48% | +0.80% | Bullish News Sentiment (+0.19) |
+| **GOLD** | 🟢 LONG | 1.5x (High Conviction Overweight) | 76.2% | +0.23% | -0.53% | +0.89% | Bullish News Sentiment (+0.19) |
+| **USD_INDEX** | 🟢 LONG | 1.0x (Standard Allocation) | 67.9% | +0.01% | -0.04% | +0.07% | Bullish News Sentiment (+0.19) |
+| **CRUDE_OIL** | 🔴 SHORT | 1.5x (High Conviction Overweight) | 74.8% | +2.75% | -6.66% | +11.11% | Bullish News Sentiment (+0.19) |
 
 ---
 
 ## 2. Institutional Decision Rationales
 
-### US_EQUITY — 🔴 SHORT (1.0x (Standard Allocation))
-- **Win Probability**: `60.4%` | **Expected Trade P&L**: `+0.20%`
-- **Risk Protocol**: Stop Loss at `-1.17%` | Take Profit at `+1.95%`
-- **Strategic Rationale**: Model identifies downside probability of 60.4%. Macro valuation friction suggests short-term re-pricing risk. Targeting +1.95% return from tactical hedge position.
+### US_EQUITY — ⚪ NEUTRAL (0.0x (Flat / Cash))
+- **Win Probability**: `50.0%` | **Expected Trade P&L**: `+0.00%`
+- **Risk Protocol**: Stop Loss at `-0.69%` | Take Profit at `+1.15%`
+- **Strategic Rationale**: Neutral equilibrium signal; model probability near 50%. Capital preserved in cash equivalents.
 
-### US_BOND — 🟢 LONG (1.5x (High Conviction Overweight))
-- **Win Probability**: `77.7%` | **Expected Trade P&L**: `+0.39%`
-- **Risk Protocol**: Stop Loss at `-0.84%` | Take Profit at `+1.40%`
-- **Strategic Rationale**: Model detects positive directional asymmetry (Win Prob: 77.7%). Confirmed by Neutral Policy Transition regime and sentiment polarity (+0.10). Targeting +1.40% with risk bounded at -0.84%.
+### US_BOND — 🔴 SHORT (1.0x (Standard Allocation))
+- **Win Probability**: `68.5%` | **Expected Trade P&L**: `+0.15%`
+- **Risk Protocol**: Stop Loss at `-0.48%` | Take Profit at `+0.80%`
+- **Strategic Rationale**: Model identifies downside probability of 68.5%. Macro valuation friction suggests short-term re-pricing risk. Targeting +0.80% return from tactical hedge position.
 
-### GOLD — 🔴 SHORT (1.5x (High Conviction Overweight))
-- **Win Probability**: `76.2%` | **Expected Trade P&L**: `+0.22%`
-- **Risk Protocol**: Stop Loss at `-0.51%` | Take Profit at `+0.85%`
-- **Strategic Rationale**: Model identifies downside probability of 76.2%. Macro valuation friction suggests short-term re-pricing risk. Targeting +0.85% return from tactical hedge position.
+### GOLD — 🟢 LONG (1.5x (High Conviction Overweight))
+- **Win Probability**: `76.2%` | **Expected Trade P&L**: `+0.23%`
+- **Risk Protocol**: Stop Loss at `-0.53%` | Take Profit at `+0.89%`
+- **Strategic Rationale**: Model identifies positive directional asymmetry (Win Prob: 76.2%). Confirmed by Contracting / Rising regime conditions and positive sentiment polarity (+0.10). Targeting +0.89% with risk bounded at -0.53%.
 
 ### USD_INDEX — 🟢 LONG (1.0x (Standard Allocation))
-- **Win Probability**: `65.1%` | **Expected Trade P&L**: `+0.08%`
-- **Risk Protocol**: Stop Loss at `-0.31%` | Take Profit at `+0.52%`
-- **Strategic Rationale**: Model detects positive directional asymmetry (Win Prob: 65.1%). Confirmed by Neutral Policy Transition regime and sentiment polarity (+0.10). Targeting +0.52% with risk bounded at -0.31%.
+- **Win Probability**: `67.9%` | **Expected Trade P&L**: `+0.01%`
+- **Risk Protocol**: Stop Loss at `-0.04%` | Take Profit at `+0.07%`
+- **Strategic Rationale**: Model identifies positive directional asymmetry (Win Prob: 67.9%). Confirmed by Contracting / Rising regime conditions and positive sentiment polarity (+0.10). Targeting +0.07% with risk bounded at -0.04%.
 
-### CRUDE_OIL — 🔴 SHORT (0.75x (Cautious Underweight))
-- **Win Probability**: `59.9%` | **Expected Trade P&L**: `+1.04%`
-- **Risk Protocol**: Stop Loss at `-6.32%` | Take Profit at `+10.53%`
-- **Strategic Rationale**: Model identifies downside probability of 59.9%. Macro valuation friction suggests short-term re-pricing risk. Targeting +10.53% return from tactical hedge position.
+### CRUDE_OIL — 🔴 SHORT (1.5x (High Conviction Overweight))
+- **Win Probability**: `74.8%` | **Expected Trade P&L**: `+2.75%`
+- **Risk Protocol**: Stop Loss at `-6.66%` | Take Profit at `+11.11%`
+- **Strategic Rationale**: Model identifies downside probability of 74.8%. Macro valuation friction suggests short-term re-pricing risk. Targeting +11.11% return from tactical hedge position.
 
 
 ---
@@ -52,8 +52,8 @@
 
 - **Position Sizing**: Dynamically modulated between 0.0x and 1.5x based on model prediction conviction.
 - **Asymmetric Risk/Reward**: Stop loss calibrated to 1.5x 5-day realized volatility; take profit calibrated to 2.5x ATR equivalent.
-- **Walk-Forward Validation**: Model parameters were validated across 14 out-of-sample temporal folds (Sharpe -1.20, Drawdown capped at 3.11%).
+- **Walk-Forward Validation**: Model parameters were validated across out-of-sample temporal folds (Sharpe 0.17, Drawdown capped at 2.96%).
 
 ---
 
-*Report automatically generated by CWT Macro Economics Sentiment Agent (LLM Decision Layer).*
+*Report automatically generated by CWT Macro Economics Sentiment Agent (Quantitative Execution Layer).*

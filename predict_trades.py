@@ -40,7 +40,8 @@ from config import (
 from src.database.db_manager import DatabaseManager
 from src.features.feature_engineering import FeatureEngineer
 from src.model.walk_forward import WalkForwardModel
-from src.llm import LLMAgent, LLMScorer
+from src.sentiment import QuantSentimentScorer
+from src.strategy import MacroStrategyEngine
 
 logger = logging.getLogger("CWT-TradePredictor")
 
@@ -74,10 +75,10 @@ class TradePredictor:
         logger.info("Loading news articles & sentiment from database...")
         news_df = self.db.get_news_articles(start_dt, end_dt)
 
-        # Stage 2: LLM Scorer (JSON)
+        # Stage 2: Quantitative Sentiment & Macro Lexicon Scoring
         if not news_df.empty:
-            logger.info("Enriching news with LLMScorer (JSON)...")
-            scorer = LLMScorer()
+            logger.info("Enriching news with QuantSentimentScorer (Lexicon)...")
+            scorer = QuantSentimentScorer()
             news_records = news_df.to_dict(orient="records")
             enriched_news = scorer.score_articles_batch(news_records)
             news_df = pd.DataFrame(enriched_news)
@@ -95,7 +96,7 @@ class TradePredictor:
         # ── 1. Aggregate Daily Macro Calendar Surprises ────────────────────────
         daily_macro = self._aggregate_daily_macro_events(events_df)
 
-        # ── 2. Aggregate Daily News Sentiment & LLM Metrics ────────────────────
+        # ── 2. Aggregate Daily News Sentiment & Quantitative Metrics ───────────
         daily_sentiment = self._aggregate_daily_news_sentiment(news_df)
 
         # ── 3. Join with Market Data across Assets ─────────────────────────────
@@ -151,7 +152,7 @@ class TradePredictor:
         return pd.DataFrame(records)
 
     def _aggregate_daily_news_sentiment(self, news_df: pd.DataFrame) -> pd.DataFrame:
-        """Aggregate news articles into daily polarity, LLM metrics, article counts, and rolling sentiment."""
+        """Aggregate news articles into daily polarity, macro metrics, article counts, and rolling sentiment."""
         if news_df.empty:
             return pd.DataFrame(columns=["calendar_date", "news_sentiment", "llm_hawk_dove", "llm_growth", "llm_inflation", "article_count"])
 
@@ -452,9 +453,9 @@ def main():
 
     predictor.save_predictions(preds)
 
-    # Stage 6: LLM Agent (Outlook and Decision)
-    logger.info("Engaging LLM Agent for macroeconomic outlook synthesis and strategic trade decisions (lookback=%d days)...", args.days)
-    agent = LLMAgent()
+    # Stage 6: Strategy Engine (Macro Outlook & Trade Decisions)
+    logger.info("Engaging Quantitative Strategy Engine for macro outlook and trade decisions (lookback=%d days)...", args.days)
+    strategy_engine = MacroStrategyEngine()
     end_date = datetime.now(timezone.utc)
     start_date = end_date - timedelta(days=args.days)
     events_df = predictor.db.get_macro_events(start_date, end_date)
@@ -469,13 +470,13 @@ def main():
         except Exception:
             pass
 
-    agent_res = agent.generate_outlook_and_decisions(
+    engine_res = strategy_engine.generate_outlook_and_decisions(
         model_results=model_results,
         trade_predictions_df=preds,
         macro_events_df=events_df,
         news_sentiment_df=news_df,
     )
-    logger.info("LLM Agent successfully updated macro outlook and trade decision matrices.")
+    logger.info("Strategy Engine successfully updated macro outlook and trade decision matrices.")
 
 
 if __name__ == "__main__":

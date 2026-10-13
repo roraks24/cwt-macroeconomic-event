@@ -1,14 +1,14 @@
 # CWT Macro Economics Sentiment Agent -- Evaluation Report
 
-**Generated**: 2026-10-12 12:50 UTC  
-**End-to-End Pipeline**: `Tavily/Apify -> LLM Scorer (JSON) -> Features -> LightGBM Walk-Forward -> Metrics -> LLM Decision Agent`
+**Generated**: 2026-10-13 13:24 UTC  
+**End-to-End Pipeline**: `Tavily/Apify -> Quant Sentiment Scorer -> Features -> LightGBM Walk-Forward -> Metrics/Plotly -> Strategy Engine`
 
 ---
 
 ## 1. Executive Summary
 
-This report evaluates the **CWT Quantitative Macroeconomic Trading Pipeline**.
-The pipeline ingests macroeconomic calendar surprises (ForexFactory via Apify), scores thematic economic news using an **LLM Scorer (JSON)**, builds quantitative interaction features, validates trade forecasting using sliding **walk-forward validation**, and synthesizes executive decisions through an **LLM Reasoning Agent**.
+This report evaluates the **CWT Quantitative Macroeconomic Trading Pipeline** (Pure Algorithmic / LLM-Free Architecture).
+The pipeline ingests macroeconomic calendar surprises (ForexFactory via Apify), scores thematic economic news using an **Algorithmic Lexicon Scorer**, builds quantitative interaction features, validates trade forecasting using sliding **walk-forward validation**, and synthesizes executive decisions through a **Quantitative Strategy Engine**.
 
 ---
 
@@ -16,14 +16,14 @@ The pipeline ingests macroeconomic calendar surprises (ForexFactory via Apify), 
 
 | Metric | Value | Description |
 | :--- | :--- | :--- |
-| **Accuracy** | 34.48% | Directional forecast hit rate |
-| **Annualized Sharpe Ratio** | -1.20 | Risk-adjusted excess return (annualized, 252d) |
-| **Sortino Ratio** | -1.68 | Downside risk-penalized return ratio |
-| **Maximum Drawdown (MDD)** | 3.11% | Peak-to-trough equity curve decline |
-| **Win Rate** | 48.28% | Out-of-sample winning trade percentage |
-| **Profit Factor** | 0.82 | Gross profits / Gross losses |
-| **Cumulative Return** | -1.08% | Total walk-forward strategy return |
-| **Total Evaluated Trades** | 29 | Out-of-sample execution instances |
+| **Accuracy** | 47.76% | Directional forecast hit rate |
+| **Annualized Sharpe Ratio** | 0.17 | Risk-adjusted excess return (annualized, 252d) |
+| **Sortino Ratio** | 0.27 | Downside risk-penalized return ratio |
+| **Maximum Drawdown (MDD)** | 2.96% | Peak-to-trough equity curve decline |
+| **Win Rate** | 52.24% | Out-of-sample winning trade percentage |
+| **Profit Factor** | 1.03 | Gross profits / Gross losses |
+| **Cumulative Return** | 0.24% | Total walk-forward strategy return |
+| **Total Evaluated Trades** | 67 | Out-of-sample execution instances |
 
 ---
 
@@ -31,11 +31,11 @@ The pipeline ingests macroeconomic calendar surprises (ForexFactory via Apify), 
 
 | Asset Class | Sharpe Ratio | Sortino Ratio | Max Drawdown | Win Rate | Profit Factor | Cumulative Return |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **US_EQUITY** | -1.20 | -1.68 | 3.11% | 48.28% | 0.82 | -1.08% |
-| **US_BOND** | -1.20 | -1.68 | 3.11% | 48.28% | 0.82 | -1.08% |
-| **GOLD** | -1.20 | -1.68 | 3.11% | 48.28% | 0.82 | -1.08% |
-| **USD_INDEX** | -1.20 | -1.68 | 3.11% | 48.28% | 0.82 | -1.08% |
-| **CRUDE_OIL** | -1.20 | -1.68 | 3.11% | 48.28% | 0.82 | -1.08% |
+| **US_EQUITY** | 0.17 | 0.27 | 2.96% | 52.24% | 1.03 | 0.24% |
+| **US_BOND** | 0.17 | 0.27 | 2.96% | 52.24% | 1.03 | 0.24% |
+| **GOLD** | 0.17 | 0.27 | 2.96% | 52.24% | 1.03 | 0.24% |
+| **USD_INDEX** | 0.17 | 0.27 | 2.96% | 52.24% | 1.03 | 0.24% |
+| **CRUDE_OIL** | 0.17 | 0.27 | 2.96% | 52.24% | 1.03 | 0.24% |
 
 ---
 

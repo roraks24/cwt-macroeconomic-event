@@ -1,84 +1,61 @@
 {
-  "generated_at": "2026-10-12T07:02:47.220213+00:00",
-  "agent_model": "openai/gpt-oss-120b",
-  "overall_metrics": {
-    "accuracy": 0.3448,
-    "precision": 0.2,
-    "recall": 0.1538,
-    "f1_score": 0.1739,
-    "sharpe_ratio": -1.1969,
-    "sortino_ratio": -1.6843,
-    "max_drawdown": 0.0311,
-    "win_rate": 0.4828,
-    "profit_factor": 0.8189,
-    "cumulative_return": -0.0108,
-    "total_trades": 29
-  },
-  "trade_decisions": [
+  "generated_at": "2026-10-13T13:24:38.916244+00:00",
+  "trades_count": 5,
+  "recommendations": [
     {
-      "trade_date": "2026-10-09",
+      "trade_date": "2026-10-12",
       "asset_class": "US_EQUITY",
-      "signal": "SHORT",
-      "win_probability": 0.6035,
-      "expected_return_pct": 0.202,
-      "confidence_score": 0.6035,
-      "stop_loss_pct": 1.17,
-      "take_profit_pct": 1.95,
-      "macro_driver": "Bullish News Sentiment (+0.50)",
-      "position_sizing": "1.0x (Standard Allocation)",
-      "decision_rationale": "Model identifies downside probability of 60.4%. Macro valuation friction suggests short-term re-pricing risk. Targeting +1.95% return from tactical hedge position."
+      "signal": "NEUTRAL",
+      "win_probability": 0.5,
+      "expected_return_pct": 0.0,
+      "confidence_score": 0.5,
+      "stop_loss_pct": 0.69,
+      "take_profit_pct": 1.15,
+      "macro_driver": "Bullish News Sentiment (+0.19)"
     },
     {
-      "trade_date": "2026-10-09",
+      "trade_date": "2026-10-12",
       "asset_class": "US_BOND",
-      "signal": "LONG",
-      "win_probability": 0.7766,
-      "expected_return_pct": 0.388,
-      "confidence_score": 0.7766,
-      "stop_loss_pct": 0.84,
-      "take_profit_pct": 1.4,
-      "macro_driver": "Bullish News Sentiment (+0.50)",
-      "position_sizing": "1.5x (High Conviction Overweight)",
-      "decision_rationale": "Model detects positive directional asymmetry (Win Prob: 77.7%). Confirmed by Neutral Policy Transition regime and sentiment polarity (+0.10). Targeting +1.40% with risk bounded at -0.84%."
-    },
-    {
-      "trade_date": "2026-10-09",
-      "asset_class": "GOLD",
       "signal": "SHORT",
-      "win_probability": 0.762,
-      "expected_return_pct": 0.223,
-      "confidence_score": 0.762,
-      "stop_loss_pct": 0.51,
-      "take_profit_pct": 0.85,
-      "macro_driver": "Bullish News Sentiment (+0.50)",
-      "position_sizing": "1.5x (High Conviction Overweight)",
-      "decision_rationale": "Model identifies downside probability of 76.2%. Macro valuation friction suggests short-term re-pricing risk. Targeting +0.85% return from tactical hedge position."
+      "win_probability": 0.685,
+      "expected_return_pct": 0.149,
+      "confidence_score": 0.685,
+      "stop_loss_pct": 0.48,
+      "take_profit_pct": 0.8,
+      "macro_driver": "Bullish News Sentiment (+0.19)"
     },
     {
-      "trade_date": "2026-10-09",
+      "trade_date": "2026-10-12",
+      "asset_class": "GOLD",
+      "signal": "LONG",
+      "win_probability": 0.7618,
+      "expected_return_pct": 0.233,
+      "confidence_score": 0.7618,
+      "stop_loss_pct": 0.53,
+      "take_profit_pct": 0.89,
+      "macro_driver": "Bullish News Sentiment (+0.19)"
+    },
+    {
+      "trade_date": "2026-10-12",
       "asset_class": "USD_INDEX",
       "signal": "LONG",
-      "win_probability": 0.6512,
-      "expected_return_pct": 0.078,
-      "confidence_score": 0.6512,
-      "stop_loss_pct": 0.31,
-      "take_profit_pct": 0.52,
-      "macro_driver": "Bullish News Sentiment (+0.50)",
-      "position_sizing": "1.0x (Standard Allocation)",
-      "decision_rationale": "Model detects positive directional asymmetry (Win Prob: 65.1%). Confirmed by Neutral Policy Transition regime and sentiment polarity (+0.10). Targeting +0.52% with risk bounded at -0.31%."
+      "win_probability": 0.6789,
+      "expected_return_pct": 0.013,
+      "confidence_score": 0.6789,
+      "stop_loss_pct": 0.04,
+      "take_profit_pct": 0.07,
+      "macro_driver": "Bullish News Sentiment (+0.19)"
     },
     {
-      "trade_date": "2026-10-09",
+      "trade_date": "2026-10-12",
       "asset_class": "CRUDE_OIL",
       "signal": "SHORT",
-      "win_probability": 0.5991,
-      "expected_return_pct": 1.044,
-      "confidence_score": 0.5991,
-      "stop_loss_pct": 6.32,
-      "take_profit_pct": 10.53,
-      "macro_driver": "Bullish News Sentiment (+0.50)",
-      "position_sizing": "0.75x (Cautious Underweight)",
-      "decision_rationale": "Model identifies downside probability of 59.9%. Macro valuation friction suggests short-term re-pricing risk. Targeting +10.53% return from tactical hedge position."
+      "win_probability": 0.7479,
+      "expected_return_pct": 2.754,
+      "confidence_score": 0.7479,
+      "stop_loss_pct": 6.66,
+      "take_profit_pct": 11.11,
+      "macro_driver": "Bullish News Sentiment (+0.19)"
     }
   ]
 }

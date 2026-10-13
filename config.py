@@ -22,20 +22,9 @@ CHARTS_DIR = REPORTS_DIR / "charts"
 for d in [RAW_DIR, PROCESSED_DIR, REPORTS_DIR, CHARTS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
-# ── API Keys ───────────────────────────────────────────────────────────────
+# ── API Keys (Data Ingestion Only) ──────────────────────────────────────────
 APIFY_API_TOKEN = os.getenv("APIFY_TOKEN") or os.getenv("APIFY_API_TOKEN", "")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-
-# ── LLM Configuration ──────────────────────────────────────────────────────
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq" if GROQ_API_KEY else "openai").lower()
-GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
-GROQ_SCORER_MODEL = os.getenv("GROQ_SCORER_MODEL", "qwen/qwen3.8-27b")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-LLM_MODEL = GROQ_MODEL if LLM_PROVIDER == "groq" else os.getenv("LLM_MODEL", OPENAI_MODEL)
-LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.2"))
-LLM_SCORER_BATCH_SIZE = int(os.getenv("LLM_SCORER_BATCH_SIZE", "5"))
 
 # ── Apify Actors ──────────────────────────────────────────────────────────
 APIFY_CALENDAR_PRIMARY = os.getenv("APIFY_CALENDAR_PRIMARY", "xtracto/forexfactory-calendar")

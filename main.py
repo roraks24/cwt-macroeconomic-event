@@ -1,13 +1,13 @@
 """
 CWT Macro Economics Sentiment Agent
 ====================================
-End-to-end quantitative trading pipeline with dual-LLM integration:
-  Tavily/Apify → LLM Scorer (JSON) → Features → ML Model + Walk-Forward → Metrics → LLM Agent (Outlook & Decision)
+End-to-end quantitative trading pipeline (LLM-Free Algorithmic Architecture):
+  Tavily/Apify → Quant Sentiment Scorer → Features → LightGBM Walk-Forward → Plotly Visualizations → Strategy Engine
 
 Usage:
-    python main.py                    # Run complete 6-stage pipeline
+    python main.py                    # Run complete 6-stage quantitative pipeline
     python main.py --scrape-only      # Only ingest data
-    python main.py --score-only       # Only run LLM scorer on news data
+    python main.py --score-only       # Only run quantitative sentiment scorer
     python main.py --train-only       # Only train walk-forward ML model
     python main.py --predict-only     # Only generate trade recommendations
     python main.py --report-only      # Only generate markdown reports
@@ -42,7 +42,8 @@ from config import (
 from predict_trades import TradePredictor
 from src.database.db_manager import DatabaseManager
 from src.features.feature_engineering import FeatureEngineer
-from src.llm import LLMAgent, LLMScorer
+from src.sentiment import QuantSentimentScorer
+from src.strategy import MacroStrategyEngine
 from src.model.walk_forward import WalkForwardModel
 from src.scraper.apify_calendar import MacroCalendarScraper
 from src.scraper.tavily_news import EconomicNewsScraper
@@ -148,10 +149,10 @@ def _generate_market_data(days_back: int) -> list[dict]:
     return data
 
 
-def run_llm_scoring(db: DatabaseManager, days_back: int = LOOKBACK_DAYS) -> pd.DataFrame:
-    """Stage 2: LLM Scorer (JSON Extraction of Sentiment, Regime, and Hawk-Dove)."""
+def run_sentiment_scoring(db: DatabaseManager, days_back: int = LOOKBACK_DAYS) -> pd.DataFrame:
+    """Stage 2: Quantitative Sentiment & Macro Lexicon Scoring (LLM-Free)."""
     logger.info("=" * 65)
-    logger.info("STAGE 2: LLM Scorer (Structured JSON Extraction - Last %d Days)", days_back)
+    logger.info("STAGE 2: Quantitative Sentiment & Macro Lexicon Scoring (Last %d Days)", days_back)
     logger.info("=" * 65)
 
     end_date = datetime.now(timezone.utc)
@@ -162,17 +163,20 @@ def run_llm_scoring(db: DatabaseManager, days_back: int = LOOKBACK_DAYS) -> pd.D
         logger.warning("No news articles in database to score. Returning empty DataFrame.")
         return news_df
 
-    scorer = LLMScorer()
+    scorer = QuantSentimentScorer()
     news_records = news_df.to_dict(orient="records")
-    logger.info("Running LLMScorer across %d news articles...", len(news_records))
+    logger.info("Running QuantSentimentScorer across %d news articles...", len(news_records))
     scored_articles = scorer.score_articles_batch(news_records)
     scored_df = pd.DataFrame(scored_articles)
 
     # Save structured scores to disk
-    scored_json_path = PROCESSED_DIR / "llm_scored_news.json"
+    scored_json_path = PROCESSED_DIR / "scored_news.json"
+    legacy_json_path = PROCESSED_DIR / "llm_scored_news.json"
     with open(scored_json_path, "w", encoding="utf-8") as f:
         json.dump(scored_articles, f, indent=2, ensure_ascii=False, default=str)
-    logger.info(f"  -> Saved {len(scored_articles)} LLM-scored articles to {scored_json_path}")
+    with open(legacy_json_path, "w", encoding="utf-8") as f:
+        json.dump(scored_articles, f, indent=2, ensure_ascii=False, default=str)
+    logger.info(f"  -> Saved {len(scored_articles)} algorithmically scored articles to {scored_json_path}")
 
     return scored_df
 
@@ -279,10 +283,10 @@ def run_visualization(feature_data: dict[str, Any], model_results: dict[str, Any
     return generated
 
 
-def run_llm_agent(db: DatabaseManager, model_results: dict[str, Any], days_back: int = LOOKBACK_DAYS) -> dict[str, Any]:
-    """Stage 6: LLM Agent (Macro Outlook Synthesis & Strategic Trade Decisions)."""
+def run_strategy_engine(db: DatabaseManager, model_results: dict[str, Any], days_back: int = LOOKBACK_DAYS) -> dict[str, Any]:
+    """Stage 6: Quantitative Strategy Engine (Macro Outlook & Trade Decision Matrix)."""
     logger.info("=" * 65)
-    logger.info("STAGE 6: LLM Agent (Macro Outlook & Trade Decision Matrix - Last %d Days)", days_back)
+    logger.info("STAGE 6: Quantitative Strategy Engine (Macro Outlook & Trade Decisions - Last %d Days)", days_back)
     logger.info("=" * 65)
 
     end_date = datetime.now(timezone.utc)
@@ -295,21 +299,21 @@ def run_llm_agent(db: DatabaseManager, model_results: dict[str, Any], days_back:
     csv_path, _ = predictor.save_predictions(predictions_df)
     logger.info(f"  -> Computed base trade signals across {len(predictions_df)} assets")
 
-    # 2. Engage LLM Reasoning Agent
-    agent = LLMAgent()
+    # 2. Engage Quantitative Strategy Engine
+    strategy_engine = MacroStrategyEngine()
     events_df = db.get_macro_events(start_date, end_date)
     news_df = db.get_news_articles(start_date, end_date)
 
-    agent_outputs = agent.generate_outlook_and_decisions(
+    engine_outputs = strategy_engine.generate_outlook_and_decisions(
         model_results=model_results,
         trade_predictions_df=predictions_df,
         macro_events_df=events_df,
         news_sentiment_df=news_df,
     )
 
-    logger.info("  -> Macro Outlook saved: %s", agent_outputs["macro_outlook_path"])
-    logger.info("  -> Trade Signals saved: %s", agent_outputs["trade_signals_path"])
-    return agent_outputs
+    logger.info("  -> Macro Outlook saved: %s", engine_outputs["macro_outlook_path"])
+    logger.info("  -> Trade Signals saved: %s", engine_outputs["trade_signals_path"])
+    return engine_outputs
 
 
 def generate_evaluation_report(model_results: dict[str, Any], chart_paths: list[str]) -> str:
@@ -354,14 +358,14 @@ def generate_evaluation_report(model_results: dict[str, Any], chart_paths: list[
     report = f"""# CWT Macro Economics Sentiment Agent -- Evaluation Report
 
 **Generated**: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}  
-**End-to-End Pipeline**: `Tavily/Apify -> LLM Scorer (JSON) -> Features -> LightGBM Walk-Forward -> Metrics -> LLM Decision Agent`
+**End-to-End Pipeline**: `Tavily/Apify -> Quant Sentiment Scorer -> Features -> LightGBM Walk-Forward -> Metrics/Plotly -> Strategy Engine`
 
 ---
 
 ## 1. Executive Summary
 
-This report evaluates the **CWT Quantitative Macroeconomic Trading Pipeline**.
-The pipeline ingests macroeconomic calendar surprises (ForexFactory via Apify), scores thematic economic news using an **LLM Scorer (JSON)**, builds quantitative interaction features, validates trade forecasting using sliding **walk-forward validation**, and synthesizes executive decisions through an **LLM Reasoning Agent**.
+This report evaluates the **CWT Quantitative Macroeconomic Trading Pipeline** (Pure Algorithmic / LLM-Free Architecture).
+The pipeline ingests macroeconomic calendar surprises (ForexFactory via Apify), scores thematic economic news using an **Algorithmic Lexicon Scorer**, builds quantitative interaction features, validates trade forecasting using sliding **walk-forward validation**, and synthesizes executive decisions through a **Quantitative Strategy Engine**.
 
 ---
 
@@ -421,10 +425,11 @@ The pipeline ingests macroeconomic calendar surprises (ForexFactory via Apify), 
 
 def main():
     """Main pipeline execution."""
-    parser = argparse.ArgumentParser(description="CWT Macro Economics Sentiment Agent")
+    parser = argparse.ArgumentParser(description="CWT Macro Economics Sentiment Agent (LLM-Free)")
     parser.add_argument("--days", type=int, default=LOOKBACK_DAYS, help=f"Lookback window in days (default: {LOOKBACK_DAYS})")
     parser.add_argument("--scrape-only", action="store_true", help="Only scrape data")
-    parser.add_argument("--score-only", action="store_true", help="Only run LLM scorer")
+    parser.add_argument("--skip-scrape", action="store_true", help="Skip scraping and use existing database records")
+    parser.add_argument("--score-only", action="store_true", help="Only run quantitative sentiment scorer")
     parser.add_argument("--train-only", action="store_true", help="Only train model")
     parser.add_argument("--predict-only", action="store_true", help="Only predict trades")
     parser.add_argument("--report-only", action="store_true", help="Only generate reports")
@@ -436,7 +441,7 @@ def main():
     logger.info("=" * 65)
     logger.info(f"  Timestamp:     {datetime.now(timezone.utc).isoformat()}")
     logger.info(f"  Lookback Window: Last {args.days} Days")
-    logger.info(f"  Mode:          {'Synthetic' if args.synthetic else 'Live Dual-LLM Pipeline'}")
+    logger.info(f"  Mode:          {'Synthetic' if args.synthetic else 'Quantitative Algorithmic Pipeline (LLM-Free)'}")
 
     db = DatabaseManager()
 
@@ -447,12 +452,12 @@ def main():
         if res_file.exists():
             with open(res_file, "r", encoding="utf-8") as f:
                 model_results = json.load(f)
-        run_llm_agent(db, model_results, days_back=args.days)
+        run_strategy_engine(db, model_results, days_back=args.days)
         return
 
     if args.score_only:
         logger.info("Running in Score-Only mode (last %d days)...", args.days)
-        run_llm_scoring(db, days_back=args.days)
+        run_sentiment_scoring(db, days_back=args.days)
         return
 
     use_synthetic = args.synthetic or (not APIFY_API_TOKEN and not TAVILY_API_KEY)
@@ -461,15 +466,15 @@ def main():
 
     try:
         # Stage 1: Data Ingestion (Tavily & Apify)
-        if not args.train_only and not args.report_only:
+        if not args.skip_scrape and not args.train_only and not args.report_only:
             run_scraping(db, days_back=args.days, use_synthetic=use_synthetic)
 
         if args.scrape_only:
             logger.info("Scrape-only mode complete.")
             return
 
-        # Stage 2: LLM Scorer (JSON Extraction)
-        scored_news_df = run_llm_scoring(db, days_back=args.days)
+        # Stage 2: Quantitative Sentiment & Macro Lexicon Scoring
+        scored_news_df = run_sentiment_scoring(db, days_back=args.days)
 
         # Stage 3: Quantitative Feature Engineering
         feature_data = run_feature_engineering(db, scored_news_df=scored_news_df, days_back=args.days)
@@ -489,8 +494,8 @@ def main():
         # Stage 5: Metrics & Visualizations
         chart_paths = run_visualization(feature_data, model_results)
 
-        # Stage 6: LLM Agent (Macro Outlook & Trade Decisions)
-        agent_outputs = run_llm_agent(db, model_results, days_back=args.days)
+        # Stage 6: Quantitative Strategy Engine (Macro Outlook & Trade Decisions)
+        strategy_outputs = run_strategy_engine(db, model_results, days_back=args.days)
 
         # Final Evaluation Report Compilation
         report_path = generate_evaluation_report(model_results, chart_paths)
@@ -498,8 +503,8 @@ def main():
         logger.info("=" * 65)
         logger.info("         Pipeline Completed Successfully!")
         logger.info("=" * 65)
-        logger.info(f"  Macro Outlook:     {agent_outputs['macro_outlook_path']}")
-        logger.info(f"  Trade Signals:     {agent_outputs['trade_signals_path']}")
+        logger.info(f"  Macro Outlook:     {strategy_outputs['macro_outlook_path']}")
+        logger.info(f"  Trade Signals:     {strategy_outputs['trade_signals_path']}")
         logger.info(f"  Evaluation Report: {report_path}")
         logger.info(f"  Charts Directory:  {CHARTS_DIR}")
         logger.info(f"  Model Results:     {REPORTS_DIR / 'model_results.json'}")
