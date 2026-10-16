@@ -130,15 +130,29 @@ class DatabaseManager:
         return None
 
     def insert_macro_events(self, events: Sequence[dict]) -> int:
-        """Bulk insert macroeconomic events."""
+        """Bulk insert macroeconomic events with deduplication."""
         if not events:
             return 0
 
         inserted_count = 0
         with self.get_session() as session:
+            # Query existing events to prevent duplicate insertion
+            dates = [self._parse_datetime(item.get("event_date")) for item in events if item.get("event_date")]
+            dates = [d for d in dates if d is not None]
+            existing_events = set()
+            if dates:
+                min_d, max_d = min(dates), max(dates)
+                rows = session.query(MacroEvent.event_date, MacroEvent.event_name).filter(
+                    MacroEvent.event_date >= min_d, MacroEvent.event_date <= max_d
+                ).all()
+                existing_events = {(r[0], r[1]) for r in rows}
+
             for item in events:
                 event_date = self._parse_datetime(item.get("event_date"))
                 if not event_date:
+                    continue
+                event_name = str(item.get("event_name", "Unknown"))
+                if (event_date, event_name) in existing_events:
                     continue
 
                 actual = item.get("actual_value")
@@ -154,7 +168,7 @@ class DatabaseManager:
 
                 event = MacroEvent(
                     event_date=event_date,
-                    event_name=str(item.get("event_name", "Unknown")),
+                    event_name=event_name,
                     country=str(item.get("country", "US")),
                     actual_value=float(actual) if actual is not None else None,
                     forecast_value=float(forecast) if forecast is not None else None,
@@ -170,19 +184,31 @@ class DatabaseManager:
                     or datetime.utcnow(),
                 )
                 session.add(event)
+                existing_events.add((event_date, event_name))
                 inserted_count += 1
 
-        logger.info("Inserted %d macro events.", inserted_count)
+        logger.info("Inserted %d new macro events (deduplicated).", inserted_count)
         return inserted_count
 
     def insert_news_articles(self, articles: Sequence[dict]) -> int:
-        """Bulk insert economic news articles."""
+        """Bulk insert economic news articles with deduplication."""
         if not articles:
             return 0
 
         inserted_count = 0
         with self.get_session() as session:
+            # Query existing URLs and titles to prevent duplicate articles
+            urls = {str(item.get("source_url") or item.get("url")) for item in articles if item.get("source_url") or item.get("url")}
+            existing_urls = set()
+            if urls:
+                existing_rows = session.query(NewsArticle.source_url).filter(NewsArticle.source_url.in_(urls)).all()
+                existing_urls = {r[0] for r in existing_rows if r[0]}
+
             for item in articles:
+                url = item.get("source_url") or item.get("url")
+                if url and str(url) in existing_urls:
+                    continue
+
                 pub_date = self._parse_datetime(
                     item.get("published_date") or item.get("created_at")
                 ) or datetime.utcnow()
@@ -191,7 +217,7 @@ class DatabaseManager:
                     published_date=pub_date,
                     title=str(item.get("title", "")),
                     content=str(item.get("content", "")),
-                    source_url=item.get("source_url") or item.get("url"),
+                    source_url=url,
                     sentiment_score=(
                         float(item["sentiment_score"])
                         if item.get("sentiment_score") is not None
@@ -206,26 +232,43 @@ class DatabaseManager:
                     created_at=datetime.utcnow(),
                 )
                 session.add(article)
+                if url:
+                    existing_urls.add(str(url))
                 inserted_count += 1
 
-        logger.info("Inserted %d news articles.", inserted_count)
+        logger.info("Inserted %d new news articles (deduplicated).", inserted_count)
         return inserted_count
 
     def insert_market_data(self, data: Sequence[dict]) -> int:
-        """Bulk insert multi-asset market data rows."""
+        """Bulk insert multi-asset market data rows with deduplication."""
         if not data:
             return 0
 
         inserted_count = 0
         with self.get_session() as session:
+            # Query existing dates and asset classes to avoid duplicate primary observations
+            dates = [self._parse_datetime(item.get("date")) for item in data if item.get("date")]
+            dates = [d for d in dates if d is not None]
+            existing_pairs = set()
+            if dates:
+                min_d, max_d = min(dates), max(dates)
+                rows = session.query(MarketData.date, MarketData.asset_class).filter(
+                    MarketData.date >= min_d, MarketData.date <= max_d
+                ).all()
+                existing_pairs = {(r[0], r[1]) for r in rows}
+
             for item in data:
                 m_date = self._parse_datetime(item.get("date"))
                 if not m_date:
                     continue
 
+                asset_class = str(item.get("asset_class", "US_EQUITY"))
+                if (m_date, asset_class) in existing_pairs:
+                    continue
+
                 market_row = MarketData(
                     date=m_date,
-                    asset_class=str(item.get("asset_class", "US_EQUITY")),
+                    asset_class=asset_class,
                     open_price=float(item.get("open_price", 0.0)),
                     high_price=float(item.get("high_price", 0.0)),
                     low_price=float(item.get("low_price", 0.0)),
@@ -243,9 +286,10 @@ class DatabaseManager:
                     created_at=datetime.utcnow(),
                 )
                 session.add(market_row)
+                existing_pairs.add((m_date, asset_class))
                 inserted_count += 1
 
-        logger.info("Inserted %d market data rows.", inserted_count)
+        logger.info("Inserted %d new market data rows (deduplicated).", inserted_count)
         return inserted_count
 
     def get_macro_events(
@@ -351,13 +395,14 @@ class DatabaseManager:
         self,
         start_date: str | datetime | None = None,
         end_date: str | datetime | None = None,
+        asset_class: str | None = None,
     ) -> pd.DataFrame:
         """
         Join macro events with market data on calendar date, producing the training dataset.
         Normalizes timestamps to date boundaries and performs a merge.
         """
-        macro_df = self.get_macro_events(start_date, end_date)
-        market_df = self.get_market_data(start_date=start_date, end_date=end_date)
+        macro_df = self.get_macro_events(start_date=start_date, end_date=end_date)
+        market_df = self.get_market_data(asset_class=asset_class, start_date=start_date, end_date=end_date)
 
         if macro_df.empty or market_df.empty:
             logger.warning("Either macro events or market data is empty. Returning available rows.")

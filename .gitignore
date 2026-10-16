@@ -1,23 +1,31 @@
-# Environment
+# Environment & Secrets
 .env
+.env.*
+!.env.example
 .venv/
 venv/
 env/
 
-# Python
+# Python & Testing Caches
 __pycache__/
 *.py[cod]
 *.egg-info/
 dist/
 build/
 *.egg
+.pytest_cache/
 
-# Data
-data/raw/*.json
-data/processed/*.csv
+# Data & Database (exclude raw scraping dumps and sqlite database)
+data/raw/
+data/*.db*
 data/processed/*.json
-data/*.db
+data/processed/feature_matrix.csv
+data/processed/*scored_news.json
 data/*.json
+
+# Keep verified prediction CSV deliverables
+!data/processed/walk_forward_predictions.csv
+!data/processed/trade_predictions.csv
 
 # IDE
 .idea/
@@ -29,7 +37,6 @@ data/*.json
 .DS_Store
 Thumbs.db
 
-# Reports (keep templates, ignore generated)
-reports/charts/*.png
-reports/charts/*.html
+# Logs
 reports/pipeline.log
+*.log

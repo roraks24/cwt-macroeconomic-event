@@ -87,10 +87,10 @@ class TradePredictor:
         market_df = self.db.get_market_data(start_date=start_dt, end_date=end_dt)
 
         if market_df.empty:
-            logger.warning("Market data table is empty. Generating baseline market data...")
-            from main import _generate_market_data
-            synthetic_market = _generate_market_data(self.lookback_days)
-            self.db.insert_market_data(synthetic_market)
+            logger.info("Market data table is empty. Fetching real historical market data...")
+            from src.scraper.market_data import get_historical_market_data
+            real_market = get_historical_market_data(days_back=self.lookback_days, allow_synthetic=False)
+            self.db.insert_market_data(real_market)
             market_df = self.db.get_market_data(start_date=start_dt, end_date=end_dt)
 
         # ── 1. Aggregate Daily Macro Calendar Surprises ────────────────────────
@@ -236,8 +236,24 @@ class TradePredictor:
             grp["return_roll_std_5d"] = grp["daily_return"].rolling(5, min_periods=1).std().fillna(0.01)
             grp["vol_regime_high"] = (grp["return_roll_std_5d"] > grp["return_roll_std_5d"].quantile(0.66)).astype(int)
 
-            # Binary target: 1 if next-day return > 0, else 0
-            grp["target"] = (grp["daily_return"].shift(-1) > 0).astype(int)
+            # Target construction aligned with Next-Session Open Execution:
+            # If open_price exists: entry at Open_{T+1}, exit at Open_{T+2}
+            # Target = 1 if Open_{T+2} > Open_{T+1} else 0
+            has_open = "open_price" in grp.columns and grp["open_price"].notna().sum() > 2
+            if has_open:
+                open_series = grp["open_price"].astype(float)
+                trade_ret = (open_series.shift(-2) - open_series.shift(-1)) / open_series.shift(-1)
+                grp["target"] = (trade_ret > 0).astype(int)
+                grp["trade_return"] = trade_ret
+                grp["entry_price"] = open_series.shift(-1)
+                grp["exit_price"] = open_series.shift(-2)
+            else:
+                trade_ret = grp["daily_return"].shift(-1)
+                grp["target"] = (trade_ret > 0).astype(int)
+                grp["trade_return"] = trade_ret
+                grp["entry_price"] = grp["close_price"] if "close_price" in grp.columns else 1.0
+                grp["exit_price"] = grp["close_price"].shift(-1) if "close_price" in grp.columns else 1.0 + trade_ret
+
             feature_dfs.append(grp)
 
         out_df = pd.concat(feature_dfs, ignore_index=True)
@@ -276,8 +292,17 @@ class TradePredictor:
             if len(asset_rows) < 15:
                 continue
 
-            # Train on history up to latest point
-            train_data = asset_rows.iloc[:-1] if len(asset_rows) > 1 else asset_rows
+            # In Next-Session Open Execution, the target for row T requires Open_{T+2},
+            # which is unobserved at time T and T-1.
+            # Therefore, historical training rows must have observed targets.
+            has_open = "open_price" in asset_rows.columns and asset_rows["open_price"].notna().sum() > 2
+            drop_n = 2 if has_open else 1
+
+            if len(asset_rows) > drop_n + 10:
+                train_data = asset_rows.iloc[:-drop_n].copy()
+            else:
+                train_data = asset_rows.iloc[:-1].copy() if len(asset_rows) > 1 else asset_rows
+
             latest_row = asset_rows.iloc[-1]
 
             X_train = train_data[feature_cols].fillna(0.0)
@@ -309,21 +334,29 @@ class TradePredictor:
             if prob_up >= 0.53:
                 signal = "LONG"
                 confidence = round(prob_up, 4)
+                win_prob = round(prob_up, 4)
             elif prob_up <= 0.47:
                 signal = "SHORT"
                 confidence = round(1.0 - prob_up, 4)
+                win_prob = round(1.0 - prob_up, 4)
             else:
                 signal = "NEUTRAL"
                 confidence = 0.50
+                win_prob = 0.50
 
-            # Dynamic Volatility & Expected Return
+            # Dynamic Volatility & Edge-Volatility Heuristic Expected Return
+            # Formula: (win_prob - 0.5) * recent_vol * 100 * 2.5
+            # Net expected return: subtract 5 bps (0.05%) round-trip / turnover friction
             recent_vol = float(latest_row.get("return_roll_std_5d", 0.01))
             if signal == "LONG":
-                expected_pnl_pct = round((prob_up - 0.5) * recent_vol * 100 * 2.5, 3)
+                gross_heuristic_pnl_pct = round((prob_up - 0.5) * recent_vol * 100 * 2.5, 3)
+                net_heuristic_pnl_pct = round(max(-100.0, gross_heuristic_pnl_pct - 0.05), 3)
             elif signal == "SHORT":
-                expected_pnl_pct = round((0.5 - prob_up) * recent_vol * 100 * 2.5, 3)
+                gross_heuristic_pnl_pct = round((0.5 - prob_up) * recent_vol * 100 * 2.5, 3)
+                net_heuristic_pnl_pct = round(max(-100.0, gross_heuristic_pnl_pct - 0.05), 3)
             else:
-                expected_pnl_pct = 0.0
+                gross_heuristic_pnl_pct = 0.0
+                net_heuristic_pnl_pct = 0.0
 
             stop_loss_pct = round(recent_vol * 100 * 1.5, 2)
             take_profit_pct = round(recent_vol * 100 * 2.5, 2)
@@ -348,11 +381,18 @@ class TradePredictor:
                 "trade_date": latest_row["calendar_date"].strftime("%Y-%m-%d") if hasattr(latest_row["calendar_date"], "strftime") else str(latest_row["calendar_date"]),
                 "asset_class": asset,
                 "signal": signal,
-                "win_probability": round(prob_up if signal == "LONG" else (1.0 - prob_up if signal == "SHORT" else 0.5), 4),
-                "expected_return_pct": expected_pnl_pct,
+                "predicted_prob_up": round(prob_up, 4),
+                "win_probability": win_prob,
+                "heuristic_expected_pnl_pct": gross_heuristic_pnl_pct,
+                "heuristic_expected_net_pnl_pct": net_heuristic_pnl_pct,
+                "expected_return_pct": net_heuristic_pnl_pct,  # legacy compatibility, documented as net heuristic
                 "confidence_score": confidence,
                 "stop_loss_pct": stop_loss_pct,
                 "take_profit_pct": take_profit_pct,
+                "execution_convention": "NEXT_SESSION_OPEN",
+                "execution_timing": "Entry: Open_{T+1}, Exit: Open_{T+2}",
+                "pnl_forecast_type": "EDGE_VOLATILITY_HEURISTIC",
+                "pnl_formula": "(win_prob - 0.5) * 5d_vol * 2.5 - 0.05% friction",
                 "macro_driver": primary_driver,
             })
 
@@ -384,31 +424,47 @@ class TradePredictor:
         rows = ""
         for _, r in pred_df.iterrows():
             badge = "🟢 LONG" if r["signal"] == "LONG" else ("🔴 SHORT" if r["signal"] == "SHORT" else "⚪ NEUTRAL")
+            p_up = f"{r.get('predicted_prob_up', r['win_probability']) * 100:.1f}%"
             win_pct = f"{r['win_probability'] * 100:.1f}%"
-            pnl_pct = f"{r['expected_return_pct']:+.2f}%"
+            net_pnl = f"{r.get('heuristic_expected_net_pnl_pct', r['expected_return_pct']):+.2f}%"
+            timing = r.get("execution_convention", "NEXT_SESSION_OPEN")
             rows += (
-                f"| **{r['asset_class']}** | {badge} | {win_pct} | {pnl_pct} "
-                f"| -{r['stop_loss_pct']:.2f}% | +{r['take_profit_pct']:.2f}% | {r['macro_driver']} |\n"
+                f"| **{r['asset_class']}** | {badge} | {p_up} | {win_pct} | {net_pnl} "
+                f"| -{r['stop_loss_pct']:.2f}% | +{r['take_profit_pct']:.2f}% | {timing} | {r['macro_driver']} |\n"
             )
 
         content = f"""# CWT Macro Economics Sentiment Agent — Trade Recommendations
 
 **Generated**: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}  
-**Methodology**: LightGBM Multi-Asset Predictive Model conditioned on Joined ForexFactory Releases & Tavily News Sentiment.
+**Methodology**: LightGBM Multi-Asset Predictive Model conditioned on Joined ForexFactory Releases & Tavily News Sentiment.  
+**Execution Convention**: Next-Session Open Execution (MOO: Entry at Open_(T+1), Exit at Open_(T+2)).
 
 ---
 
 ## 1. Executive Trade Signals
 
-| Asset Class | Signal | Win Probability | Expected Return | Stop Loss | Take Profit | Primary Macro Driver |
-| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| Asset Class | Signal | P(Up) | Trade Win Prob | Expected Net P&L | Stop Loss | Take Profit | Execution Timing | Primary Macro Driver |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
 {rows}
 ---
 
-## 2. Quantitative Model Architecture
+## 2. Methodology & Expected P&L Classification
+
+> [!IMPORTANT]
+> **Heuristic Classification Note**:
+> The reported **Expected Net P&L** is an **Edge-Volatility Heuristic**, not an econometric or machine-learned return forecast.
+> - **Formula**: `Expected Net P&L = (Win Probability - 0.50) * Trailing_5d_Vol * 2.5 - 0.05% (Friction)`
+> - **Predicted Probability of Upward Move**: P(Up) represents the classifier's estimate that the underlying asset's next-open price will rise.
+> - **Directional Trade Win Probability**: Probability that the active trade (LONG or SHORT) is profitable (P(Up) for LONG; 1 - P(Up) for SHORT).
+> - **Net Strategy Profitability**: Expected trade return net of the 5.0 bps (0.05%) round-trip turnover friction.
+> - **Execution Timing**: All signals generated at Day T close (16:00 EST) are executed at the Next Session Open (Open_(T+1)) and liquidated/rebalanced at Open_(T+2).
+
+---
+
+## 3. Quantitative Model Architecture
 
 - **Calendar Integration**: Daily actual-versus-forecast surprise metrics from Apify (`xtracto/forexfactory-calendar`).
-- **News NLP**: Polarity scoring via Tavily Search API with TextBlob NLP analysis.
+- **News NLP**: Quantitative sentiment scoring via algorithmic financial lexicon.
 - **Risk Management**: Volatility-scaled dynamic stops (1.5x 5d ATR equivalent) and profit targets (2.5x ATR).
 
 *Report generated automatically by CWT Macro Economics Sentiment Agent.*

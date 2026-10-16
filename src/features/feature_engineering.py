@@ -26,6 +26,7 @@ from config import (
     WALK_FORWARD_TEST_DAYS,
     WALK_FORWARD_TRAIN_DAYS,
 )
+from src.utils.timezone import assign_to_eligible_trading_session
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +56,9 @@ class FeatureEngineer:
 
         self.df = df.copy()
 
-        # Standardize date column
-        date_candidates = ["event_date", "date", "Date", "Event_Date"]
-        date_col = next((col for col in date_candidates if col in self.df.columns), None)
+        # Standardize date column (prioritize calendar_date or date to capture all market trading days)
+        date_candidates = ["calendar_date", "date", "event_date", "Date", "Event_Date"]
+        date_col = next((col for col in date_candidates if col in self.df.columns and self.df[col].notna().any()), None)
         if date_col is None:
             raise ValueError(f"Could not find a valid date column in: {list(self.df.columns)}")
 
@@ -160,10 +161,13 @@ class FeatureEngineer:
         time_df["is_month_end"] = dt.is_month_end.astype(int)
 
         # Extract dates for key recurring macro releases
-        event_names = self.df.get("event_name", pd.Series(dtype=str)).fillna("").astype(str).str.lower()
-        fomc_dates = sorted(self.df.loc[event_names.str.contains("fomc|fed interest|fed funds"), "event_date"].unique())
-        nfp_dates = sorted(self.df.loc[event_names.str.contains("non-farm|payroll|nfp"), "event_date"].unique())
-        cpi_dates = sorted(self.df.loc[event_names.str.contains(r"\bcpi\b"), "event_date"].unique())
+        if "event_name" in self.df.columns:
+            event_names = self.df["event_name"].fillna("").astype(str).str.lower()
+            fomc_dates = sorted(self.df.loc[event_names.str.contains("fomc|fed interest|fed funds"), "event_date"].unique())
+            nfp_dates = sorted(self.df.loc[event_names.str.contains("non-farm|payroll|nfp"), "event_date"].unique())
+            cpi_dates = sorted(self.df.loc[event_names.str.contains(r"\bcpi\b"), "event_date"].unique())
+        else:
+            fomc_dates, nfp_dates, cpi_dates = [], [], []
 
         def _days_since_last(current_date: pd.Timestamp, event_dates: List[pd.Timestamp]) -> float:
             prior = [d for d in event_dates if d < current_date]
@@ -226,10 +230,10 @@ class FeatureEngineer:
                 for window in [5, 10, 20]:
                     asset_feats[f"{prefix}momentum_{window}d"] = g["daily_return"].rolling(window, min_periods=1).sum().fillna(0.0)
 
-            # Volatility regime based on rolling 20d std
+            # Volatility regime based on rolling 20d std (strictly backward-looking expanding quantile to prevent lookahead leakage)
             vol_20d = asset_feats[f"{prefix}return_roll_std_20d"]
-            q_low = vol_20d.quantile(0.33) if len(vol_20d.dropna()) > 10 else 0.005
-            q_high = vol_20d.quantile(0.66) if len(vol_20d.dropna()) > 10 else 0.015
+            q_low = vol_20d.expanding(min_periods=10).quantile(0.33).fillna(0.006)
+            q_high = vol_20d.expanding(min_periods=10).quantile(0.66).fillna(0.014)
 
             vol_regime = pd.Series(1, index=asset_feats.index)  # Default 1: medium
             vol_regime[vol_20d <= q_low] = 0  # low
@@ -276,12 +280,39 @@ class FeatureEngineer:
             return empty_res
 
         ndf = news_df.copy()
-        # Find date column
-        date_col = next((c for c in ["date", "event_date", "published_at", "published_date"] if c in ndf.columns), None)
-        if date_col is None:
+        # Find publication date/time column
+        pub_col = next((c for c in ["published_date", "published_at", "publication_time", "date", "event_date"] if c in ndf.columns), None)
+        if pub_col is None:
             return empty_res
 
-        ndf["event_date"] = pd.to_datetime(ndf[date_col])
+        # Distinguish retrieval/scrape time from publication time
+        retrieval_col = next((c for c in ["created_at", "scraped_at", "retrieved_at"] if c in ndf.columns), None)
+
+        min_date = all_dates[0]
+
+        # Timezone-aware session assignment: articles published after 16:00 America/New_York (or retrieved after cutoff)
+        # are strictly excluded from that day's feature vector and rolled forward to the next eligible trading session.
+        eligible_dates = []
+        for _, row in ndf.iterrows():
+            pub_val = row[pub_col]
+            ret_val = row[retrieval_col] if retrieval_col else None
+            el_dt = assign_to_eligible_trading_session(pub_val, retrieved_at=ret_val, trading_dates=all_dates)
+            eligible_dates.append(el_dt)
+
+        ndf["event_date"] = pd.to_datetime(eligible_dates)
+
+        # Check for legitimate pre-window lookback articles within the feature lookback horizon (up to 14 days before min_date)
+        from src.utils.timezone import USEquityBusinessDay
+        usb = USEquityBusinessDay
+        lookback_cutoff = min_date - pd.Timedelta(days=14)
+        pre_window_articles = ndf[(ndf["event_date"] < min_date) & (ndf["event_date"] >= lookback_cutoff)]
+
+        if not pre_window_articles.empty:
+            earliest_pre_date = pre_window_articles["event_date"].min()
+            pre_dates = pd.bdate_range(start=earliest_pre_date, end=min_date, freq=usb).floor("D")[:-1]
+            active_calendar = pre_dates.union(all_dates).sort_values()
+        else:
+            active_calendar = all_dates
 
         # Find sentiment score column
         score_col = next((c for c in ["sentiment_score", "sentiment", "score", "polarity"] if c in ndf.columns), None)
@@ -305,11 +336,15 @@ class FeatureEngineer:
                 agg_dict[f"mean_{lc}"] = (lc, "mean")
 
         daily_sentiment = ndf.groupby("event_date").agg(**agg_dict)
-        daily_sentiment = daily_sentiment.reindex(all_dates).fillna(0.0)
+        # Reindex across active calendar so rolling windows incorporate legitimate pre-window lookback
+        daily_sentiment = daily_sentiment.reindex(active_calendar).fillna(0.0)
 
         daily_sentiment["sentiment_roll_3d"] = daily_sentiment["mean_sentiment"].rolling(3, min_periods=1).mean()
         daily_sentiment["sentiment_roll_7d"] = daily_sentiment["mean_sentiment"].rolling(7, min_periods=1).mean()
         daily_sentiment["sentiment_momentum"] = daily_sentiment["sentiment_roll_3d"] - daily_sentiment["sentiment_roll_7d"]
+
+        # Slice back strictly to the evaluation dates
+        daily_sentiment = daily_sentiment.loc[all_dates]
 
         out_cols = ["sentiment_roll_3d", "sentiment_roll_7d", "sentiment_momentum", "news_volume"]
         for lc in llm_cols:
@@ -402,46 +437,135 @@ class FeatureEngineer:
         base = pd.DataFrame(index=all_dates)
 
         # Merge on date index
-        matrix = base.join(time_feats, how="left")
+        macro_matrix = base.join(time_feats, how="left")
         if not surprise_feats.empty:
-            matrix = matrix.join(surprise_feats, how="left")
+            macro_matrix = macro_matrix.join(surprise_feats, how="left")
         if not rolling_feats.empty:
-            matrix = matrix.join(rolling_feats, how="left")
+            macro_matrix = macro_matrix.join(rolling_feats, how="left")
         if not sentiment_feats.empty:
-            matrix = matrix.join(sentiment_feats, how="left")
+            macro_matrix = macro_matrix.join(sentiment_feats, how="left")
         if not regime_feats.empty:
-            matrix = matrix.join(regime_feats, how="left")
+            macro_matrix = macro_matrix.join(regime_feats, how="left")
 
         # Forward-fill macro announcements and rolling variables
-        matrix = matrix.ffill().fillna(0.0)
+        macro_matrix = macro_matrix.ffill().fillna(0.0)
 
-        # Build target: next-day return direction (1 if > 0, 0 otherwise)
-        # Compute next day return from asset data
-        df_sorted = self.df.sort_values("event_date").reset_index(drop=True)
-        if "daily_return" in df_sorted.columns:
-            # If multiple asset classes are present, compute target per asset or mean market target
-            daily_ret = df_sorted.groupby("event_date")["daily_return"].mean()
-        elif "close_price" in df_sorted.columns:
-            daily_close = df_sorted.groupby("event_date")["close_price"].last()
-            daily_ret = daily_close.pct_change()
+        has_assets = "asset_class" in self.df.columns and self.df["asset_class"].notna().any()
+        if has_assets and len(self.df["asset_class"].unique()) > 1:
+            panel_slices = []
+            for asset in sorted(self.df["asset_class"].unique()):
+                asset_sub = self.df[self.df["asset_class"] == asset].drop_duplicates(subset=["event_date"]).sort_values("event_date").copy()
+                asset_sub = asset_sub.set_index("event_date").reindex(all_dates)
+
+                # Next-Session Open Execution when open_price is available:
+                # Features X_T observed up to Day T Close (16:00 EST).
+                # Signal S_T generated post-close.
+                # Entry is at Day T+1 Open: Open_{T+1} = open_series.shift(-1).
+                # Exit/rebalance is at Day T+2 Open: Open_{T+2} = open_series.shift(-2).
+                # Trade return = (Open_{T+2} - Open_{T+1}) / Open_{T+1}.
+                has_open = "open_price" in asset_sub.columns and asset_sub["open_price"].notna().sum() > 2
+                if has_open:
+                    open_series = asset_sub["open_price"].astype(float)
+                    trade_ret = (open_series.shift(-2) - open_series.shift(-1)) / open_series.shift(-1)
+                    entry_price = open_series.shift(-1)
+                    exit_price = open_series.shift(-2)
+                    drop_n = 2
+                elif "daily_return" in asset_sub.columns:
+                    asset_ret = asset_sub["daily_return"].fillna(0.0)
+                    trade_ret = asset_ret.shift(-1)
+                    entry_price = pd.Series(1.0, index=all_dates)
+                    exit_price = 1.0 + trade_ret
+                    drop_n = 1
+                elif "close_price" in asset_sub.columns:
+                    close_series = asset_sub["close_price"].astype(float)
+                    trade_ret = close_series.pct_change().shift(-1)
+                    entry_price = close_series
+                    exit_price = close_series.shift(-1)
+                    drop_n = 1
+                else:
+                    trade_ret = pd.Series(0.0, index=all_dates)
+                    entry_price = pd.Series(1.0, index=all_dates)
+                    exit_price = pd.Series(1.0, index=all_dates)
+                    drop_n = 1
+
+                asset_target = (trade_ret > 0).astype(int)
+
+                slice_df = macro_matrix.copy()
+                slice_df["asset_class"] = asset
+                slice_df["daily_return"] = trade_ret.fillna(0.0)
+                slice_df["trade_return"] = trade_ret.fillna(0.0)
+                slice_df["open_to_open_return"] = trade_ret.fillna(0.0)
+                slice_df["target"] = asset_target
+                slice_df["entry_price"] = entry_price
+                slice_df["exit_price"] = exit_price
+                slice_df["event_date"] = slice_df.index
+                if "surprise" in asset_sub.columns and asset_sub["surprise"].notna().any():
+                    slice_df["surprise"] = asset_sub["surprise"].fillna(0.0)
+                elif "macro_surprise_roll_5d" in slice_df.columns:
+                    slice_df["surprise"] = slice_df["macro_surprise_roll_5d"]
+                else:
+                    slice_df["surprise"] = 0.0
+
+                # Drop the unobserved rows for this specific asset
+                slice_df = slice_df.iloc[:-drop_n].copy()
+                panel_slices.append(slice_df)
+
+            matrix = pd.concat(panel_slices, axis=0).sort_values(by=["event_date", "asset_class"]).reset_index(drop=True)
         else:
-            daily_ret = pd.Series(0.0, index=all_dates)
+            # Single asset series or aggregated fallback
+            df_sorted = self.df.sort_values("event_date").reset_index(drop=True)
+            has_open = "open_price" in df_sorted.columns and df_sorted["open_price"].notna().sum() > 2
+            if has_open:
+                daily_open = df_sorted.groupby("event_date")["open_price"].first().reindex(macro_matrix.index)
+                trade_ret = (daily_open.shift(-2) - daily_open.shift(-1)) / daily_open.shift(-1)
+                entry_price = daily_open.shift(-1)
+                exit_price = daily_open.shift(-2)
+                drop_n = 2
+            elif "daily_return" in df_sorted.columns:
+                daily_ret = df_sorted.groupby("event_date")["daily_return"].mean().reindex(macro_matrix.index).fillna(0.0)
+                trade_ret = daily_ret.shift(-1)
+                entry_price = pd.Series(1.0, index=macro_matrix.index)
+                exit_price = 1.0 + trade_ret
+                drop_n = 1
+            elif "close_price" in df_sorted.columns:
+                daily_close = df_sorted.groupby("event_date")["close_price"].last().reindex(macro_matrix.index)
+                trade_ret = daily_close.pct_change().shift(-1)
+                entry_price = daily_close
+                exit_price = daily_close.shift(-1)
+                drop_n = 1
+            else:
+                trade_ret = pd.Series(0.0, index=macro_matrix.index)
+                entry_price = pd.Series(1.0, index=macro_matrix.index)
+                exit_price = pd.Series(1.0, index=macro_matrix.index)
+                drop_n = 1
 
-        daily_ret = daily_ret.reindex(matrix.index).fillna(0.0)
-        target_series = (daily_ret.shift(-1) > 0).astype(int)
+            matrix = macro_matrix.copy()
+            matrix["target"] = (trade_ret > 0).astype(int)
+            matrix["daily_return"] = trade_ret.fillna(0.0)
+            matrix["trade_return"] = trade_ret.fillna(0.0)
+            matrix["open_to_open_return"] = trade_ret.fillna(0.0)
+            matrix["entry_price"] = entry_price
+            matrix["exit_price"] = exit_price
+            matrix["event_date"] = matrix.index
+            if "surprise" in df_sorted.columns:
+                matrix["surprise"] = df_sorted.groupby("event_date")["surprise"].mean().reindex(matrix.index).fillna(0.0)
+            elif "macro_surprise_roll_5d" in matrix.columns:
+                matrix["surprise"] = matrix["macro_surprise_roll_5d"]
 
-        matrix["target"] = target_series
-        matrix["daily_return"] = daily_ret
-        matrix["event_date"] = matrix.index
+            if has_assets:
+                matrix["asset_class"] = self.df["asset_class"].iloc[0]
 
-        # Drop the last row since its target shift(-1) is looking into unobserved future
-        matrix = matrix.iloc[:-1].copy()
+            # Drop the unobserved rows
+            matrix = matrix.iloc[:-drop_n].copy().reset_index(drop=True)
 
         # Ensure no remaining NaNs
         matrix = matrix.dropna()
 
-        # Cache feature names
-        exclude = {"event_date", "date", "target", "daily_return", "close_price", "asset_class"}
+        # Cache feature names (exclude dates, targets, returns, prices, and metadata)
+        exclude = {
+            "event_date", "date", "target", "daily_return", "trade_return", "open_to_open_return",
+            "close_price", "open_price", "entry_price", "exit_price", "asset_class", "surprise"
+        }
         self._feature_names = [col for col in matrix.columns if col not in exclude]
 
         logger.info(f"Feature matrix built successfully: {matrix.shape[0]} rows, {len(self._feature_names)} features.")

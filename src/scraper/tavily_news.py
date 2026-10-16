@@ -25,6 +25,7 @@ from config import (  # noqa: E402
     RAW_DIR,
     TAVILY_API_KEY,
 )
+from src.utils.timezone import parse_to_ny_iso
 
 logger = logging.getLogger(__name__)
 
@@ -121,14 +122,8 @@ class EconomicNewsScraper:
                 url = item.get("url", "").strip()
                 pub_date = item.get("published_date")
 
-                # Parse and standardize publication date to UTC ISO
-                if pub_date:
-                    try:
-                        parsed_dt = pd.to_datetime(pub_date).tz_localize(None).isoformat()
-                    except Exception:
-                        parsed_dt = datetime.now(timezone.utc).isoformat()
-                else:
-                    parsed_dt = datetime.now(timezone.utc).isoformat()
+                # Parse and standardize publication date to America/New_York ISO
+                parsed_dt = parse_to_ny_iso(pub_date)
 
                 score = item.get("score", 0.85)
 
@@ -225,12 +220,8 @@ class EconomicNewsScraper:
                 if not title:
                     continue
                 url = it.get("link") or it.get("url") or ""
-                pub_date = it.get("datetime") or it.get("date") or datetime.now(timezone.utc).isoformat()
-
-                try:
-                    dt = pd.to_datetime(pub_date).tz_localize(None).isoformat()
-                except Exception:
-                    dt = datetime.now(timezone.utc).isoformat()
+                pub_date = it.get("datetime") or it.get("date")
+                dt = parse_to_ny_iso(pub_date)
 
                 articles.append(
                     {
@@ -308,43 +299,50 @@ class EconomicNewsScraper:
     def analyze_sentiment(self, text: str) -> dict[str, float]:
         """
         Compute sentiment polarity score (-1.0 to +1.0) and subjectivity (0.0 to 1.0) using TextBlob.
-        Includes domain financial lexicon heuristic fallback if TextBlob is unavailable.
+        Includes domain financial lexicon heuristic fallback if TextBlob is unavailable or neutral.
         """
         if not text or not text.strip():
             return {"polarity": 0.0, "subjectivity": 0.0}
 
+        blob_polarity = None
+        blob_subjectivity = 0.0
         if TextBlob is not None:
             try:
                 blob = TextBlob(text)
-                return {
-                    "polarity": round(float(blob.sentiment.polarity), 4),
-                    "subjectivity": round(float(blob.sentiment.subjectivity), 4),
-                }
+                pol = float(blob.sentiment.polarity)
+                subj = float(blob.sentiment.subjectivity)
+                if abs(pol) > 1e-4:
+                    return {
+                        "polarity": round(pol, 4),
+                        "subjectivity": round(subj, 4),
+                    }
+                blob_polarity = pol
+                blob_subjectivity = subj
             except Exception as e:
                 logger.debug("TextBlob analysis error: %s. Using heuristic fallback.", e)
 
-        # Fallback financial sentiment heuristic
+        # Domain financial sentiment heuristic (Loughran-McDonald inspired)
         pos_terms = {
             "growth", "expand", "expansion", "gain", "surge", "beat", "rally", "resilient",
             "optimism", "robust", "increase", "bullish", "strong", "cools", "eased", "moderated",
             "disinflation", "recovery", "outperformed", "steady", "upward"
         }
         neg_terms = {
-            "recession", "decline", "drop", "slump", "miss", "bearish", "fall", "cooling",
+            "recession", "decline", "drop", "slump", "slumps", "miss", "bearish", "fall", "cooling",
             "weak", "crisis", "default", "inflationary", "loss", "down", "struggle", "downturn",
             "contraction", "headwind", "restrictive", "deficit", "sluggish"
         }
 
         words = re.findall(r"\b\w+\b", text.lower())
         if not words:
-            return {"polarity": 0.0, "subjectivity": 0.0}
+            return {"polarity": 0.0, "subjectivity": blob_subjectivity}
 
         pos_count = sum(1 for w in words if w in pos_terms)
         neg_count = sum(1 for w in words if w in neg_terms)
         total_matched = pos_count + neg_count
 
         if total_matched == 0:
-            return {"polarity": 0.0, "subjectivity": 0.0}
+            return {"polarity": blob_polarity if blob_polarity is not None else 0.0, "subjectivity": blob_subjectivity}
 
         score = (pos_count - neg_count) / float(total_matched)
         polarity = round(float(max(min(score, 1.0), -1.0)), 4)

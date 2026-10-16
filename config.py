@@ -25,6 +25,7 @@ for d in [RAW_DIR, PROCESSED_DIR, REPORTS_DIR, CHARTS_DIR]:
 # ── API Keys (Data Ingestion Only) ──────────────────────────────────────────
 APIFY_API_TOKEN = os.getenv("APIFY_TOKEN") or os.getenv("APIFY_API_TOKEN", "")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
+EXA_API_KEY = os.getenv("EXA_API_KEY", "")
 
 # ── Apify Actors ──────────────────────────────────────────────────────────
 APIFY_CALENDAR_PRIMARY = os.getenv("APIFY_CALENDAR_PRIMARY", "xtracto/forexfactory-calendar")
@@ -37,8 +38,8 @@ DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DATA_DIR / 'cwt_macro.db'}
 
 # ── Pipeline Settings ──────────────────────────────────────────────────────
 LOOKBACK_DAYS = int(os.getenv("LOOKBACK_DAYS", "180"))
-WALK_FORWARD_TRAIN_DAYS = int(os.getenv("WALK_FORWARD_TRAIN_DAYS", "120"))
-WALK_FORWARD_TEST_DAYS = int(os.getenv("WALK_FORWARD_TEST_DAYS", "30"))
+WALK_FORWARD_TRAIN_DAYS = int(os.getenv("WALK_FORWARD_TRAIN_DAYS", "60"))
+WALK_FORWARD_TEST_DAYS = int(os.getenv("WALK_FORWARD_TEST_DAYS", "20"))
 
 # ── Macroeconomic Events of Interest ──────────────────────────────────────
 MACRO_EVENTS = [

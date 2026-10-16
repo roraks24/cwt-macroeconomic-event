@@ -676,19 +676,62 @@ class MacroSentimentCharts:
         df = predictions_df.copy()
         date_col = next((c for c in ["event_date", "date", "trade_date"] if c in df.columns), df.columns[0])
         df[date_col] = pd.to_datetime(df[date_col])
-        df = df.sort_values(date_col).reset_index(drop=True)
 
-        # 1. Strategy Return Series
-        y_true = df["actual"].values.astype(int) if "actual" in df.columns else np.ones(len(df))
-        y_pred = df["predicted"].values.astype(int) if "predicted" in df.columns else np.ones(len(df))
-        signal = np.where(y_pred == 1, 1.0, -1.0)
+        # Multi-asset portfolio date alignment
+        if "asset_class" in df.columns and df["asset_class"].nunique() > 1:
+            daily_rows = []
+            assets = sorted(df["asset_class"].unique())
+            weight = 1.0 / len(assets)
+            spy_asset = "US_EQUITY" if "US_EQUITY" in assets else ("SPY" if "SPY" in assets else assets[0])
 
-        if "daily_return" in df.columns:
-            spy_daily = df["daily_return"].values.astype(float)
+            prev_signals = {asset: 0.0 for asset in assets}
+            cost_rate = 5.0 / 10000.0
+
+            for dt, grp in df.groupby(date_col):
+                day_gross = 0.0
+                day_to = 0.0
+                spy_ret = 0.0
+
+                for asset in assets:
+                    a_row = grp[grp["asset_class"] == asset]
+                    if not a_row.empty:
+                        yp = int(a_row["predicted"].values[0]) if "predicted" in a_row.columns else 1
+                        r = float(a_row["daily_return"].values[0]) if "daily_return" in a_row.columns else 0.0
+                        sig = 1.0 if yp == 1 else -1.0
+                        if asset == spy_asset:
+                            spy_ret = r
+                    else:
+                        sig = 0.0
+                        r = 0.0
+
+                    to = abs(sig - prev_signals[asset])
+                    prev_signals[asset] = sig
+                    day_gross += weight * sig * r
+                    day_to += weight * to
+
+                day_fric = day_to * cost_rate
+                day_net = day_gross - day_fric
+                daily_rows.append({
+                    date_col: dt,
+                    "strat_daily": day_net,
+                    "spy_daily": spy_ret,
+                })
+
+            daily_df = pd.DataFrame(daily_rows).sort_values(date_col).reset_index(drop=True)
+            plot_dates = daily_df[date_col]
+            strat_daily = daily_df["strat_daily"].values
+            spy_daily = daily_df["spy_daily"].values
         else:
-            spy_daily = np.where(y_true == 1, 0.008, -0.008)
-
-        strat_daily = signal * spy_daily
+            df = df.sort_values(date_col).reset_index(drop=True)
+            plot_dates = df[date_col]
+            y_pred = df["predicted"].values.astype(int) if "predicted" in df.columns else np.ones(len(df))
+            signal = np.where(y_pred == 1, 1.0, -1.0)
+            cost_rate = 5.0 / 10000.0
+            prev_sig = np.roll(signal, 1)
+            prev_sig[0] = 0.0
+            friction = np.abs(signal - prev_sig) * cost_rate
+            spy_daily = df["daily_return"].values.astype(float) if "daily_return" in df.columns else np.zeros(len(df))
+            strat_daily = signal * spy_daily - friction
 
         # Cumulative series
         strat_cum = (np.cumprod(1.0 + strat_daily) - 1.0) * 100.0
@@ -704,10 +747,10 @@ class MacroSentimentCharts:
         # 1. Top Subplot: Cumulative Returns
         fig.add_trace(
             go.Scatter(
-                x=df[date_col],
+                x=plot_dates,
                 y=strat_cum,
                 mode="lines",
-                name="Walk-Forward Strategy",
+                name="Walk-Forward Strategy (Net)",
                 line=dict(color=self.COLOR_POS, width=2.8),
                 hovertemplate="<b>Date</b>: %{x|%Y-%m-%d}<br><b>Strategy Cum Return</b>: %{y:+.2f}%<extra></extra>",
             ),
@@ -716,10 +759,10 @@ class MacroSentimentCharts:
 
         fig.add_trace(
             go.Scatter(
-                x=df[date_col],
+                x=plot_dates,
                 y=spy_cum,
                 mode="lines",
-                name="SPY Buy & Hold Benchmark",
+                name="SPY Benchmark",
                 line=dict(color=self.COLOR_PRIMARY, width=2.0, dash="dash"),
                 hovertemplate="<b>Date</b>: %{x|%Y-%m-%d}<br><b>SPY Benchmark</b>: %{y:+.2f}%<extra></extra>",
             ),
@@ -732,7 +775,7 @@ class MacroSentimentCharts:
         # 2. Bottom Subplot: Drawdowns
         fig.add_trace(
             go.Scatter(
-                x=df[date_col],
+                x=plot_dates,
                 y=strat_dd,
                 mode="lines",
                 name="Strategy Drawdown",
@@ -746,7 +789,7 @@ class MacroSentimentCharts:
 
         fig.add_trace(
             go.Scatter(
-                x=df[date_col],
+                x=plot_dates,
                 y=spy_dd,
                 mode="lines",
                 name="SPY Drawdown",
@@ -1088,12 +1131,42 @@ class MacroSentimentCharts:
         df = predictions_df.copy()
         date_col = next((c for c in ["event_date", "date"] if c in df.columns), df.columns[0])
         df[date_col] = pd.to_datetime(df[date_col])
-        df = df.sort_values(date_col).reset_index(drop=True)
 
-        y_pred = df["predicted"].values.astype(int) if "predicted" in df.columns else np.ones(len(df))
-        signal = np.where(y_pred == 1, 1.0, -1.0)
-        daily_ret = df["daily_return"].values.astype(float) if "daily_return" in df.columns else np.full(len(df), 0.005)
-        strat_returns = pd.Series(signal * daily_ret)
+        if "asset_class" in df.columns and df["asset_class"].nunique() > 1:
+            daily_rows = []
+            assets = sorted(df["asset_class"].unique())
+            weight = 1.0 / len(assets)
+            prev_signals = {asset: 0.0 for asset in assets}
+            cost_rate = 5.0 / 10000.0
+
+            for dt, grp in df.groupby(date_col):
+                day_gross = 0.0
+                day_to = 0.0
+                for asset in assets:
+                    a_row = grp[grp["asset_class"] == asset]
+                    if not a_row.empty:
+                        yp = int(a_row["predicted"].values[0]) if "predicted" in a_row.columns else 1
+                        r = float(a_row["daily_return"].values[0]) if "daily_return" in a_row.columns else 0.0
+                        sig = 1.0 if yp == 1 else -1.0
+                    else:
+                        sig = 0.0
+                        r = 0.0
+                    to = abs(sig - prev_signals[asset])
+                    prev_signals[asset] = sig
+                    day_gross += weight * sig * r
+                    day_to += weight * to
+                day_net = day_gross - (day_to * cost_rate)
+                daily_rows.append({date_col: dt, "strat_daily": day_net})
+            daily_df = pd.DataFrame(daily_rows).sort_values(date_col).reset_index(drop=True)
+            strat_returns = pd.Series(daily_df["strat_daily"].values)
+            plot_dates = daily_df[date_col]
+        else:
+            df = df.sort_values(date_col).reset_index(drop=True)
+            y_pred = df["predicted"].values.astype(int) if "predicted" in df.columns else np.ones(len(df))
+            signal = np.where(y_pred == 1, 1.0, -1.0)
+            daily_ret = df["daily_return"].values.astype(float) if "daily_return" in df.columns else np.full(len(df), 0.005)
+            strat_returns = pd.Series(signal * daily_ret)
+            plot_dates = df[date_col]
 
         # Rolling Sharpe: adaptive min_periods for smaller samples
         effective_window = min(window, max(len(strat_returns), 5))
@@ -1109,24 +1182,24 @@ class MacroSentimentCharts:
         fig.add_hline(y=0.0, line_dash="solid", line_color=self.COLOR_NEG, line_width=1.2, annotation_text="Breakeven Sharpe = 0.0", annotation_position="bottom right")
 
         # Rolling Sharpe Line
-        trade_indices = list(range(1, len(df) + 1))
+        trade_indices = list(range(1, len(strat_returns) + 1))
         fig.add_trace(
             go.Scatter(
                 x=trade_indices,
                 y=rolling_sharpe,
                 mode="lines+markers",
-                name=f"Rolling {effective_window}-Trade Sharpe",
+                name=f"Rolling {effective_window}-Day Sharpe",
                 line=dict(color=self.COLOR_PRIMARY, width=2.8),
                 marker=dict(
                     color=np.where(rolling_sharpe >= 0, self.COLOR_POS, self.COLOR_NEG),
                     size=6,
                 ),
                 hovertemplate=(
-                    "<b>Trade #</b>: %{x}<br>"
+                    "<b>Day #</b>: %{x}<br>"
                     "<b>Date</b>: %{customdata|%Y-%m-%d}<br>"
                     "<b>Rolling Sharpe</b>: %{y:.2f}<extra></extra>"
                 ),
-                customdata=df[date_col],
+                customdata=plot_dates,
             )
         )
 

@@ -1,8 +1,8 @@
 # CWT Macro Economics Sentiment Agent — Trade Decision Matrix
 
-**Generated**: 2026-10-13 13:24 UTC  
+**Generated**: 2026-10-16 06:01 UTC  
 **Analytical Architecture**: `Tavily/Apify → Quant Sentiment Scorer → Features → LightGBM Walk-Forward → Strategy Engine`  
-**Dominant Macro Regime**: **Contracting / Rising (Bearish)**  
+**Dominant Macro Regime**: **Contracting / Stable (Bearish)**  
 
 ---
 
@@ -10,40 +10,40 @@
 
 | Asset Class | Signal | Position Sizing | Win Probability | Expected Return | Stop Loss | Take Profit | Key Macro Trigger |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| **US_EQUITY** | ⚪ NEUTRAL | 0.0x (Flat / Cash) | 50.0% | +0.00% | -0.69% | +1.15% | Bullish News Sentiment (+0.19) |
-| **US_BOND** | 🔴 SHORT | 1.0x (Standard Allocation) | 68.5% | +0.15% | -0.48% | +0.80% | Bullish News Sentiment (+0.19) |
-| **GOLD** | 🟢 LONG | 1.5x (High Conviction Overweight) | 76.2% | +0.23% | -0.53% | +0.89% | Bullish News Sentiment (+0.19) |
-| **USD_INDEX** | 🟢 LONG | 1.0x (Standard Allocation) | 67.9% | +0.01% | -0.04% | +0.07% | Bullish News Sentiment (+0.19) |
-| **CRUDE_OIL** | 🔴 SHORT | 1.5x (High Conviction Overweight) | 74.8% | +2.75% | -6.66% | +11.11% | Bullish News Sentiment (+0.19) |
+| **US_EQUITY** | 🟢 LONG | 1.5x (High Conviction Overweight) | 85.9% | +0.46% | -0.85% | +1.42% | Bullish News Sentiment (+0.43) |
+| **US_BOND** | ⚪ NEUTRAL | 0.0x (Flat / Cash) | 50.0% | +0.00% | -0.59% | +0.99% | Bullish News Sentiment (+0.43) |
+| **GOLD** | 🟢 LONG | 1.5x (High Conviction Overweight) | 73.1% | +0.76% | -2.10% | +3.50% | Bullish News Sentiment (+0.43) |
+| **USD_INDEX** | 🔴 SHORT | 1.5x (High Conviction Overweight) | 72.6% | +0.20% | -0.66% | +1.09% | Bullish News Sentiment (+0.43) |
+| **CRUDE_OIL** | 🟢 LONG | 1.0x (Standard Allocation) | 66.6% | +0.33% | -1.38% | +2.30% | Bullish News Sentiment (+0.43) |
 
 ---
 
 ## 2. Institutional Decision Rationales
 
-### US_EQUITY — ⚪ NEUTRAL (0.0x (Flat / Cash))
+### US_EQUITY — 🟢 LONG (1.5x (High Conviction Overweight))
+- **Win Probability**: `85.9%` | **Expected Trade P&L**: `+0.46%`
+- **Risk Protocol**: Stop Loss at `-0.85%` | Take Profit at `+1.42%`
+- **Strategic Rationale**: Model identifies positive directional asymmetry (Win Prob: 85.9%). Confirmed by Contracting / Stable regime conditions and positive sentiment polarity (+0.10). Targeting +1.42% with risk bounded at -0.85%.
+
+### US_BOND — ⚪ NEUTRAL (0.0x (Flat / Cash))
 - **Win Probability**: `50.0%` | **Expected Trade P&L**: `+0.00%`
-- **Risk Protocol**: Stop Loss at `-0.69%` | Take Profit at `+1.15%`
+- **Risk Protocol**: Stop Loss at `-0.59%` | Take Profit at `+0.99%`
 - **Strategic Rationale**: Neutral equilibrium signal; model probability near 50%. Capital preserved in cash equivalents.
 
-### US_BOND — 🔴 SHORT (1.0x (Standard Allocation))
-- **Win Probability**: `68.5%` | **Expected Trade P&L**: `+0.15%`
-- **Risk Protocol**: Stop Loss at `-0.48%` | Take Profit at `+0.80%`
-- **Strategic Rationale**: Model identifies downside probability of 68.5%. Macro valuation friction suggests short-term re-pricing risk. Targeting +0.80% return from tactical hedge position.
-
 ### GOLD — 🟢 LONG (1.5x (High Conviction Overweight))
-- **Win Probability**: `76.2%` | **Expected Trade P&L**: `+0.23%`
-- **Risk Protocol**: Stop Loss at `-0.53%` | Take Profit at `+0.89%`
-- **Strategic Rationale**: Model identifies positive directional asymmetry (Win Prob: 76.2%). Confirmed by Contracting / Rising regime conditions and positive sentiment polarity (+0.10). Targeting +0.89% with risk bounded at -0.53%.
+- **Win Probability**: `73.1%` | **Expected Trade P&L**: `+0.76%`
+- **Risk Protocol**: Stop Loss at `-2.10%` | Take Profit at `+3.50%`
+- **Strategic Rationale**: Model identifies positive directional asymmetry (Win Prob: 73.1%). Confirmed by Contracting / Stable regime conditions and positive sentiment polarity (+0.10). Targeting +3.50% with risk bounded at -2.10%.
 
-### USD_INDEX — 🟢 LONG (1.0x (Standard Allocation))
-- **Win Probability**: `67.9%` | **Expected Trade P&L**: `+0.01%`
-- **Risk Protocol**: Stop Loss at `-0.04%` | Take Profit at `+0.07%`
-- **Strategic Rationale**: Model identifies positive directional asymmetry (Win Prob: 67.9%). Confirmed by Contracting / Rising regime conditions and positive sentiment polarity (+0.10). Targeting +0.07% with risk bounded at -0.04%.
+### USD_INDEX — 🔴 SHORT (1.5x (High Conviction Overweight))
+- **Win Probability**: `72.6%` | **Expected Trade P&L**: `+0.20%`
+- **Risk Protocol**: Stop Loss at `-0.66%` | Take Profit at `+1.09%`
+- **Strategic Rationale**: Model identifies downside probability of 72.6%. Macro valuation friction suggests short-term re-pricing risk. Targeting +1.09% return from tactical hedge position.
 
-### CRUDE_OIL — 🔴 SHORT (1.5x (High Conviction Overweight))
-- **Win Probability**: `74.8%` | **Expected Trade P&L**: `+2.75%`
-- **Risk Protocol**: Stop Loss at `-6.66%` | Take Profit at `+11.11%`
-- **Strategic Rationale**: Model identifies downside probability of 74.8%. Macro valuation friction suggests short-term re-pricing risk. Targeting +11.11% return from tactical hedge position.
+### CRUDE_OIL — 🟢 LONG (1.0x (Standard Allocation))
+- **Win Probability**: `66.6%` | **Expected Trade P&L**: `+0.33%`
+- **Risk Protocol**: Stop Loss at `-1.38%` | Take Profit at `+2.30%`
+- **Strategic Rationale**: Model identifies positive directional asymmetry (Win Prob: 66.6%). Confirmed by Contracting / Stable regime conditions and positive sentiment polarity (+0.10). Targeting +2.30% with risk bounded at -1.38%.
 
 
 ---
@@ -52,7 +52,7 @@
 
 - **Position Sizing**: Dynamically modulated between 0.0x and 1.5x based on model prediction conviction.
 - **Asymmetric Risk/Reward**: Stop loss calibrated to 1.5x 5-day realized volatility; take profit calibrated to 2.5x ATR equivalent.
-- **Walk-Forward Validation**: Model parameters were validated across out-of-sample temporal folds (Sharpe 0.17, Drawdown capped at 2.96%).
+- **Walk-Forward Validation**: Model parameters were validated across out-of-sample temporal folds (Sharpe -2.00, Drawdown capped at 7.61%).
 
 ---
 

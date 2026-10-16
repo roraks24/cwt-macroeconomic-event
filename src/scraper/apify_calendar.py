@@ -28,6 +28,7 @@ from config import (  # noqa: E402
     MACRO_EVENTS,
     RAW_DIR,
 )
+from src.utils.timezone import parse_to_ny_iso
 
 logger = logging.getLogger(__name__)
 
@@ -151,17 +152,9 @@ class MacroCalendarScraper:
             if not event_name:
                 continue
 
-            # Standardize timestamp to UTC ISO format
+            # Standardize timestamp to America/New_York trading session date and ISO format
             raw_date = item.get("datetimeISO") or item.get("dateline") or item.get("date") or item.get("time")
-            try:
-                if isinstance(raw_date, (int, float)):
-                    dt = datetime.fromtimestamp(raw_date, tz=timezone.utc).isoformat()
-                elif raw_date:
-                    dt = pd.to_datetime(raw_date).tz_localize(None).isoformat()
-                else:
-                    dt = datetime.now(timezone.utc).isoformat()
-            except Exception:
-                dt = datetime.now(timezone.utc).isoformat()
+            dt = parse_to_ny_iso(raw_date)
 
             actual_val = self._parse_event_value(item.get("actual"))
             forecast_val = self._parse_event_value(item.get("forecast") or item.get("consensus"))
@@ -225,13 +218,7 @@ class MacroCalendarScraper:
                 continue
 
             raw_date = item.get("date") or item.get("datetime") or item.get("time")
-            try:
-                if raw_date:
-                    dt = pd.to_datetime(raw_date).tz_localize(None).isoformat()
-                else:
-                    dt = datetime.now(timezone.utc).isoformat()
-            except Exception:
-                dt = datetime.now(timezone.utc).isoformat()
+            dt = parse_to_ny_iso(raw_date)
 
             actual_val = self._parse_event_value(item.get("actual"))
             forecast_val = self._parse_event_value(item.get("forecast"))
